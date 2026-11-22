@@ -100,13 +100,8 @@
     /* Boardings and exits in the station charts */
     --series-on: #2a78d6;
     --series-off: #eb6834;
-    /* The map: paper land, pale water */
-    --map-bg: oklch(0.945 0.014 255);
-    --map-land: oklch(0.995 0.003 255);
-    --map-border: oklch(0.9 0.016 255);
-    --map-water: oklch(0.87 0.05 235);
-    --map-transfer: oklch(0.3 0.06 265);
-    --map-dot-edge: oklch(1 0 0 / 80%);
+    /* Behind the map while it loads */
+    --map-bg: #eef0f5;
 }
 
 .dark {
@@ -150,13 +145,7 @@
     --heat: oklch(0.84 0.15 85);
     --series-on: #3987e5;
     --series-off: #d95926;
-    /* The map: the city at night, with the river as the dark between */
-    --map-bg: oklch(0.135 0.03 265);
-    --map-land: oklch(0.205 0.04 265);
-    --map-border: oklch(0.27 0.045 265);
-    --map-water: oklch(0.135 0.03 265);
-    --map-transfer: oklch(0.97 0.01 250);
-    --map-dot-edge: oklch(1 0 0 / 28%);
+    --map-bg: #0d1220;
 }
 
 @layer base {
@@ -169,4 +158,23 @@
   html {
     @apply font-sans;
     }
+}
+/* The map library's own pieces, brought into this site's look. */
+.maplibregl-map {
+    font: inherit;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact {
+    background: var(--card);
+    color: var(--muted-foreground);
+    font-size: 11px;
+}
+.maplibregl-ctrl-attrib a {
+    color: inherit;
+}
+.dark .maplibregl-ctrl-attrib-button {
+    filter: invert(1);
+}
+.maplibregl-cooperative-gesture-screen {
+    font-size: 1rem;
+    line-height: 1.5;
 }

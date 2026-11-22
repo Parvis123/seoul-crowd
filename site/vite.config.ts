@@ -7,6 +7,8 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: '/seoul-crowd/',
   plugins: [react(), tailwindcss()],
+  // The map library's background worker is an ES module.
+  worker: { format: 'es' },
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, './src') },
   },

@@ -1,11 +1,10 @@
 import { RefreshCw, TriangleAlert } from 'lucide-react'
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { toast } from 'sonner'
 
 import { useNetwork, usePlaces, useStations } from '@/api/queries'
 import { AllPlaces } from '@/components/all-places'
 import { LanguageToggle } from '@/components/language-toggle'
-import { CityMap } from '@/components/map/city-map'
 import { NowList } from '@/components/now-list'
 import { PlaceSheet } from '@/components/place-sheet'
 import { SearchBox } from '@/components/search-box'
@@ -20,6 +19,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatPeople, useLanguage } from '@/lib/i18n'
 import type { Place } from '@/model/place'
 import type { Station } from '@/model/station'
+
+// The map library is large, so it loads on its own after the page appears.
+const CityMap = lazy(() => import('@/components/map/city-map').then((module) => ({ default: module.CityMap })))
 
 /** What the side panel is showing. Only one thing is open at a time. */
 type Selection = { kind: 'place'; code: string } | { kind: 'station'; key: string } | null
@@ -97,7 +99,9 @@ function App() {
         {network && !network.places.isEmpty && (
           <>
             <section className="mt-6">
-              <CityMap network={network} selected={openPlace ?? openStation} onSelect={select} />
+              <Suspense fallback={<Skeleton className="h-[24rem] rounded-xl sm:h-[32rem] lg:h-[36rem]" />}>
+                <CityMap network={network} selected={openPlace ?? openStation} onSelect={select} />
+              </Suspense>
             </section>
 
             <Tabs defaultValue="now" className="mt-8">

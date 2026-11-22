@@ -40,9 +40,12 @@ const en = {
   legendPlaces: 'Rings are places. Colour is the crowd level, size is people.',
   legendStations: 'Dots are stations. Colour is the line, size is riders a day.',
   placesOnMap: (shown: number, total: number) => `${shown} of ${total} places are on the map so far.`,
-  mapHintMouse: 'Drag to move. Pinch or use the buttons to zoom.',
-  mapHintTouch: 'Use two fingers to move the map.',
-  mapSource: 'District boundaries: Statistics Korea.',
+  mapHintTouch: 'Use two fingers to move the map',
+  mapZoomHintCtrl: 'Use Ctrl + scroll to zoom the map',
+  mapZoomHintCmd: 'Use ⌘ + scroll to zoom the map',
+  mapUnavailable: 'This browser cannot draw the map. The lists below still work.',
+  mapStreetsFailed: 'The street map did not load, so only the marks are shown.',
+  mapSource: 'Map: OpenFreeMap, © OpenMapTiles, data from OpenStreetMap.',
 
   none: 'None yet',
 
@@ -184,9 +187,12 @@ const ko: Strings = {
   legendPlaces: '원은 장소입니다. 색은 혼잡도, 크기는 인구입니다.',
   legendStations: '점은 지하철역입니다. 색은 노선, 크기는 하루 승하차 인원입니다.',
   placesOnMap: (shown, total) => `현재 ${total}곳 중 ${shown}곳이 지도에 표시됩니다.`,
-  mapHintMouse: '드래그해서 이동하고, 핀치하거나 버튼으로 확대·축소하세요.',
-  mapHintTouch: '두 손가락으로 지도를 움직이세요.',
-  mapSource: '행정구역 경계: 통계청.',
+  mapHintTouch: '두 손가락으로 지도를 움직이세요',
+  mapZoomHintCtrl: 'Ctrl 키를 누른 채 스크롤하면 지도가 확대·축소됩니다',
+  mapZoomHintCmd: '⌘ 키를 누른 채 스크롤하면 지도가 확대·축소됩니다',
+  mapUnavailable: '이 브라우저에서는 지도를 표시할 수 없습니다. 아래 목록은 그대로 사용할 수 있습니다.',
+  mapStreetsFailed: '배경 지도를 불러오지 못해 표시만 보여줍니다.',
+  mapSource: '지도: OpenFreeMap, © OpenMapTiles, 데이터 출처 OpenStreetMap.',
 
   none: '없음',
 
