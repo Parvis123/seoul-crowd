@@ -1,0 +1,48 @@
+name: Collect station ridership
+
+on:
+  schedule:
+    - cron: "37 20 * * *" # once a day, 05:37 in Seoul (the time here is UTC)
+  workflow_dispatch: # lets you run it by hand from the Actions tab
+  push: # also runs whenever the station collector itself changes
+    branches: [main]
+    paths:
+      - collect-stations.mjs
+      - .github/workflows/stations.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stations
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch ridership
+        run: node collect-stations.mjs
+        env:
+          SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
+
+      - name: Save to the repository
+        run: |
+          git config user.name "crowd-collector"
+          git config user.email "crowd-collector@users.noreply.github.com"
+          git add data/stations.json
+          if git diff --cached --quiet; then
+            echo "Nothing new to save"
+            exit 0
+          fi
+          git commit -m "Update station ridership $(date -u +%Y-%m-%d)"
+          # The crowd collector saves to the same branch every 20 minutes, so try a few times.
+          for attempt in 1 2 3; do
+            if git pull --rebase && git push; then exit 0; fi
+            sleep 5
+          done
+          echo "::error title=Station collector::Could not save the new file to the repository"
+          exit 1

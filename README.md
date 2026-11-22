@@ -12,7 +12,10 @@ Data: Seoul Open Data Plaza, Seoul real-time city data (`citydata_ppltn`). Reuse
 | `places.json` | The places to collect. Names must match the city's official place names exactly. |
 | `.github/workflows/collect.yml` | Runs the collector every 20 minutes on GitHub and saves the results to the repository. |
 | `data/readings-YYYY-MM.csv` | Every reading, one file per month. Created on the first run. |
-| `data/weekly.json` | Average people per weekday and hour for each place. This is the only file the website reads. |
+| `data/weekly.json` | Average people per weekday and hour for each place. The website reads this for places. |
+| `collect-stations.mjs` | Fetches subway ridership for every station. Same key, no dependencies. |
+| `.github/workflows/stations.yml` | Runs the station collector once a day. |
+| `data/stations.json` | Boardings and exits for every station. The website reads this for stations. |
 
 ## Setup
 
@@ -28,6 +31,26 @@ To try it on your own computer first:
 ```
 SEOUL_API_KEY=your-key node collect.mjs
 ```
+
+## Stations
+
+`collect-stations.mjs` uses three more datasets from the same portal, with the same key:
+
+| Dataset | What it gives |
+| --- | --- |
+| `CardSubwayTime` | Boardings and exits for each station and hour, as a total for the month. A month appears a few days after it ends. |
+| `CardSubwayStatsNew` | Boardings and exits for each station and day, about three days behind. |
+| `SearchSTNBySubwayLineInfo` | The English name of each station. |
+
+Each run asks for the last 12 months and the last 8 weeks, about 75 requests, and rewrites `data/stations.json`. The city keeps this history itself, so the collector stores nothing else and a failed run loses nothing.
+
+In `data/stations.json`, each entry is one station on one line:
+
+- `on` and `off`: boardings and exits for an average day of the latest month, one number for each hour from 00 to 23.
+- `monthly`: boardings plus exits for each month listed in `months`.
+- `weekdays`: average boardings plus exits for each weekday, Monday first.
+
+These are card taps at the gates, so they show how busy a station is, not how full the trains are. The hourly figures are monthly totals, so they cannot be split by weekday.
 
 ## If a place fails
 
