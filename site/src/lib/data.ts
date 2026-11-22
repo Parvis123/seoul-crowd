@@ -1,13 +1,13 @@
+import categories from '@/data/categories.json'
+
 // Reads the weekly summary the collector saves on the main branch, so the
 // site shows live data from any branch and from a local dev server.
 export const DATA_URL =
   'https://raw.githubusercontent.com/Parvis123/seoul-crowd/main/data/weekly.json'
 
-export type Level = '여유' | '보통' | '약간 붐빔' | '붐빔'
-
 export type Latest = {
   time: string // Seoul local time, "YYYY-MM-DD HH:MM"
-  level: Level | string
+  level: string
   min: number
   max: number
 }
@@ -22,10 +22,7 @@ export type Place = {
   grid: (number | null)[][] // [weekday, Monday first][hour] = average people
 }
 
-export type Weekly = {
-  generated_at: string
-  places: Place[]
-}
+export type Weekly = { generated_at: string; places: Place[] }
 
 export const LEVELS: Record<string, { label: string; rank: number }> = {
   붐빔: { label: 'Crowded', rank: 3 },
@@ -34,13 +31,31 @@ export const LEVELS: Record<string, { label: string; rank: number }> = {
   여유: { label: 'Relaxed', rank: 0 },
 }
 
+export const CATEGORIES: Record<string, string> = {
+  인구밀집지역: 'Busy districts',
+  발달상권: 'Shopping areas',
+  공원: 'Parks',
+  관광특구: 'Tourist zones',
+  '고궁·문화유산': 'Palaces and heritage',
+}
+
+export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+export const DAYS_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
 export async function loadWeekly(signal?: AbortSignal): Promise<Weekly> {
   const res = await fetch(DATA_URL, { cache: 'no-store', signal })
   if (!res.ok) throw new Error(`The data file returned ${res.status}`)
   return res.json()
 }
 
-export type Ranked = Place & { latest: Latest; people: number; rank: number }
+export type Current = Place & {
+  latest: Latest
+  people: number // middle of the estimated range
+  rank: number // 0 relaxed to 3 crowded
+  levelLabel: string
+  category: string
+  fill: number // people here as a percentage of the busiest place right now
+}
 
 // "YYYY-MM-DD HH:MM" in Seoul time, as a sortable number of minutes.
 function minutes(time: string): number {
@@ -48,28 +63,50 @@ function minutes(time: string): number {
   return Date.UTC(y, mo - 1, d, h, mi) / 60000
 }
 
-/**
- * Places with a current reading, busiest first.
- *
- * For now this ranks by the city's own crowd level, with the estimated number
- * of people as the tie-breaker. Once a few weeks of history exist it should
- * rank by how each place compares with its own usual for this hour.
- */
-export function rankNow(places: Place[]): Ranked[] {
-  const current = places.filter((p): p is Place & { latest: Latest } => p.latest !== null)
-  if (current.length === 0) return []
-  const newest = Math.max(...current.map((p) => minutes(p.latest.time)))
-  return current
-    .filter((p) => newest - minutes(p.latest.time) <= 90) // drop places whose last reading is old
-    .map((p) => ({
+/** Places whose latest reading is recent, with the derived numbers the page shows. */
+export function currentPlaces(places: Place[]): Current[] {
+  const withReading = places.filter((p): p is Place & { latest: Latest } => p.latest !== null)
+  if (withReading.length === 0) return []
+  const newest = Math.max(...withReading.map((p) => minutes(p.latest.time)))
+  const recent = withReading.filter((p) => newest - minutes(p.latest.time) <= 90)
+  const most = Math.max(...recent.map((p) => (p.latest.min + p.latest.max) / 2))
+  return recent.map((p) => {
+    const people = (p.latest.min + p.latest.max) / 2
+    return {
       ...p,
-      people: (p.latest.min + p.latest.max) / 2,
+      people,
       rank: LEVELS[p.latest.level]?.rank ?? 0,
-    }))
-    .sort((a, b) => b.rank - a.rank || b.people - a.people)
+      levelLabel: LEVELS[p.latest.level]?.label ?? p.latest.level,
+      category: (categories as Record<string, string>)[p.name] ?? '',
+      fill: most > 0 ? Math.max(1, Math.round((people / most) * 100)) : 0,
+    }
+  })
 }
 
-export function newestReading(places: Place[]): string | null {
-  const times = places.flatMap((p) => (p.latest ? [p.latest.time] : []))
-  return times.length ? times.sort().at(-1)! : null
+/**
+ * Busiest first. For now this uses the city's own crowd level, with the
+ * estimated number of people as the tie-breaker. Once a few weeks of history
+ * exist it should compare each place with its own usual for this hour.
+ */
+export function byBusiest(a: Current, b: Current): number {
+  return b.rank - a.rank || b.people - a.people
 }
+
+export function newestReading(places: Current[]): string | null {
+  return places.length ? places.map((p) => p.latest.time).sort().at(-1)! : null
+}
+
+/** Average people for each hour of the day, across the weekdays that have a reading. */
+export function typicalDay(place: Place): { hour: string; people: number | null }[] {
+  return Array.from({ length: 24 }, (_, h) => {
+    const values = place.grid.map((row) => row[h]).filter((v): v is number => v !== null)
+    return {
+      hour: `${String(h).padStart(2, '0')}:00`,
+      people: values.length ? Math.round(values.reduce((s, v) => s + v, 0) / values.length) : null,
+    }
+  })
+}
+
+export const formatPeople = (n: number) => new Intl.NumberFormat('en-GB').format(Math.round(n / 100) * 100)
+export const formatRange = (l: Latest) =>
+  `${new Intl.NumberFormat('en-GB').format(l.min)} to ${new Intl.NumberFormat('en-GB').format(l.max)}`

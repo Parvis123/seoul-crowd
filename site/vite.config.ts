@@ -8,6 +8,6 @@ export default defineConfig({
   base: '/seoul-crowd/',
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, './src') },
+    alias: { '@': path.resolve(import.meta.dirname, './src') },
   },
 })
