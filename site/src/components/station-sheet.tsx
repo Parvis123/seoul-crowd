@@ -1,0 +1,255 @@
+import { useMemo } from 'react'
+import { Area, AreaChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
+
+import { Columns } from '@/components/columns'
+import { LevelBadge } from '@/components/level-badge'
+import { LineBadge } from '@/components/line-badge'
+import { Button } from '@/components/ui/button'
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from '@/components/ui/chart'
+import { Progress } from '@/components/ui/progress'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import type { Current } from '@/lib/data'
+import {
+  formatCompact,
+  formatDay,
+  formatMonth,
+  formatNumber,
+  formatRange,
+  placeNames,
+  stationNames,
+  useLanguage,
+} from '@/lib/i18n'
+import { SERVICE_HOURS, type Station, type StationFile, busiestHour, busiestWeekday, count } from '@/lib/stations'
+
+const daysIn = (month: string) => {
+  const [y, m] = month.split('-').map(Number)
+  return new Date(Date.UTC(y, m, 0)).getUTCDate()
+}
+
+export function StationSheet({
+  station,
+  file,
+  places,
+  onClose,
+  onOpenPlace,
+}: {
+  station: Station | null
+  file: StationFile
+  places: Current[] // the crowd places named after this station
+  onClose: () => void
+  onOpenPlace: (place: Current) => void
+}) {
+  const { lang, s } = useLanguage()
+  const number = (value: number) => formatNumber(lang, value)
+
+  const dayConfig = useMemo<ChartConfig>(
+    () => ({
+      // The legend lists series by key, so these names keep boardings first.
+      boardings: { label: s.seriesOn, color: 'var(--series-on)' },
+      exits: { label: s.seriesOff, color: 'var(--series-off)' },
+    }),
+    [s],
+  )
+  const trendConfig = useMemo<ChartConfig>(() => ({ value: { label: s.trendSeries, color: 'var(--heat)' } }), [s])
+
+  const names = station ? stationNames(station, lang) : null
+  const figures = station?.all
+  const weekday = figures ? busiestWeekday(figures) : null
+
+  return (
+    <Sheet open={station !== null} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl"
+        onOpenAutoFocus={(event) => {
+          // Keep focus on the panel itself so the first chart's tooltip doesn't pop open.
+          event.preventDefault()
+          ;(event.currentTarget as HTMLElement).focus()
+        }}
+        tabIndex={-1}
+      >
+        {station && names && figures && (
+          <>
+            <SheetHeader>
+              <SheetTitle className="pr-8 text-xl">{names.primary}</SheetTitle>
+              <SheetDescription asChild>
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  {station.lines.map((line) => (
+                    <LineBadge key={line} line={line} named />
+                  ))}
+                </div>
+              </SheetDescription>
+              <p className="text-xs text-muted-foreground/70" lang={names.secondaryLang}>
+                {names.secondary}
+              </p>
+            </SheetHeader>
+            <ScrollArea className="min-h-0 flex-1 [&>[data-slot=scroll-area-viewport]>div]:!block">
+              <div className="space-y-6 px-4 pb-6">
+                <dl className="grid gap-2 sm:grid-cols-3 sm:gap-3">
+                  {[
+                    [s.tileTotal, number(count(figures, null).total)],
+                    [s.tileHour, s.hourRange(busiestHour(figures))],
+                    [s.tileDay, weekday === null ? s.none : s.daysLong[weekday]],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="flex items-baseline justify-between gap-3 rounded-lg border px-3 py-2.5 sm:block sm:p-3"
+                    >
+                      <dt className="text-sm text-muted-foreground sm:text-xs">{label}</dt>
+                      <dd className="font-semibold sm:mt-1">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                {places.length > 0 && (
+                  <section className="space-y-3">
+                    <h3 className="font-medium">{s.stationNowTitle}</h3>
+                    {places.map((place) => (
+                      <div key={place.code} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{placeNames(place, lang).primary}</div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                            <LevelBadge level={place.latest.level} />
+                            <span className="tabular-nums">{s.rangePeople(formatRange(lang, place.latest))}</span>
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => onOpenPlace(place)}>
+                          {s.seePlace}
+                        </Button>
+                      </div>
+                    ))}
+                  </section>
+                )}
+
+                <Separator />
+
+                <section className="space-y-3">
+                  <h3 className="font-medium">{s.dayChartTitle}</h3>
+                  <ChartContainer config={dayConfig} className="h-56 w-full">
+                    <LineChart
+                      data={SERVICE_HOURS.map((h) => ({ hour: s.hour(h), boardings: figures.on[h], exits: figures.off[h] }))}
+                      margin={{ left: 0, right: 12, top: 8 }}
+                    >
+                      <CartesianGrid vertical={false} />
+                      <XAxis
+                        dataKey="hour"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        ticks={[6, 12, 18, 0].map(s.hour)}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        width={44}
+                        tickFormatter={(value: number) => formatCompact(lang, value)}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      {(['boardings', 'exits'] as const).map((key) => (
+                        <Line
+                          key={key}
+                          dataKey={key}
+                          type="monotone"
+                          stroke={`var(--color-${key})`}
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={{ r: 4, stroke: 'var(--popover)', strokeWidth: 2 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ChartContainer>
+                  <p className="text-sm text-muted-foreground">{s.dayChartHint(formatMonth(lang, file.month))}</p>
+                </section>
+
+                {figures.weekdays && file.days && (
+                  <section className="space-y-3">
+                    <h3 className="font-medium">{s.weekdaysTitle}</h3>
+                    <Columns
+                      label={s.weekdaysTitle}
+                      peakValue={number(Math.max(...figures.weekdays))}
+                      items={figures.weekdays.map((value, d) => ({
+                        id: String(d),
+                        value,
+                        axis: s.days[d],
+                        text: s.weekdayBar(s.daysLong[d], number(value)),
+                      }))}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      {s.weekdaysHint(formatDay(lang, file.days.from), formatDay(lang, file.days.to))}
+                    </p>
+                  </section>
+                )}
+
+                {station.lines.length > 1 && (
+                  <section className="space-y-3">
+                    <h3 className="font-medium">{s.linesTitle}</h3>
+                    <ul className="space-y-2.5">
+                      {station.lines.map((line) => {
+                        const total = count(station.byLine[line]!, null).total
+                        return (
+                          <li key={line} className="grid grid-cols-[9.5rem_minmax(0,1fr)_4.5rem] items-center gap-3 text-sm">
+                            <LineBadge line={line} named />
+                            <Progress
+                              value={(total / count(figures, null).total) * 100}
+                              className="h-1.5 [&>[data-slot=progress-indicator]]:bg-heat"
+                              aria-hidden="true"
+                            />
+                            <span className="text-right tabular-nums">{number(total)}</span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                    <p className="text-sm text-muted-foreground">{s.linesHint}</p>
+                  </section>
+                )}
+
+                <section className="space-y-3">
+                  <h3 className="font-medium">{s.trendTitle}</h3>
+                  <ChartContainer config={trendConfig} className="h-44 w-full">
+                    <AreaChart
+                      data={file.months.map((month, m) => ({
+                        month: formatMonth(lang, month, true),
+                        value: figures.monthly[m] === null ? null : Math.round(figures.monthly[m]! / daysIn(month)),
+                      }))}
+                      margin={{ left: 0, right: 12, top: 8 }}
+                    >
+                      <CartesianGrid vertical={false} />
+                      <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} interval={2} />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        width={44}
+                        tickFormatter={(value: number) => formatCompact(lang, value)}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
+                      <Area
+                        dataKey="value"
+                        type="monotone"
+                        stroke="var(--color-value)"
+                        fill="var(--color-value)"
+                        fillOpacity={0.1}
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 4, stroke: 'var(--popover)', strokeWidth: 2 }}
+                      />
+                    </AreaChart>
+                  </ChartContainer>
+                  <p className="text-sm text-muted-foreground">{s.trendHint}</p>
+                </section>
+              </div>
+            </ScrollArea>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  )
+}
