@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Fetch readings
-        run: node collect.mjs
+        run: node collect.mjs --places places-all.json
         env:
           SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
 
