@@ -39,11 +39,8 @@ export function NowList({
                       <span className="truncate font-medium">{names.primary}</span>
                       <LevelBadge level={place.latest.level} />
                     </span>
-                    <span className="mt-0.5 flex items-center justify-between gap-2 text-sm text-muted-foreground">
-                      <span lang={names.secondaryLang} className="truncate">
-                        {names.secondary}
-                      </span>
-                      <span className="shrink-0 tabular-nums">{formatRange(lang, place.latest)}</span>
+                    <span className="mt-0.5 block text-sm text-muted-foreground tabular-nums">
+                      {s.rangePeople(formatRange(lang, place.latest))}
                     </span>
                     <Progress
                       value={place.fill}

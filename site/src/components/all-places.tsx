@@ -113,11 +113,8 @@ export function AllPlaces({ places, onSelect }: { places: Current[]; onSelect: (
                       }
                     }}
                   >
-                    <TableCell className="max-w-44 pl-4 sm:max-w-64 lg:max-w-96">
-                      <div className="truncate font-medium">{names.primary}</div>
-                      <div className="truncate text-muted-foreground" lang={names.secondaryLang}>
-                        {names.secondary}
-                      </div>
+                    <TableCell className="max-w-44 truncate py-3 pl-4 font-medium sm:max-w-64 lg:max-w-96">
+                      {names.primary}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground md:table-cell">
                       {s.categories[place.category] ?? ''}

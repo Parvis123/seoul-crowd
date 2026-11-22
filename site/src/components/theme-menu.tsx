@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useLanguage } from '@/lib/i18n'
 
+const ITEM = 'gap-2.5 py-2 pl-2.5'
+
 export function ThemeMenu() {
   const { theme, setTheme } = useTheme()
   const { s } = useLanguage()
@@ -22,15 +24,15 @@ export function ThemeMenu() {
           <Moon className="hidden dark:block" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" sideOffset={8} className="w-44 p-1.5">
         <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
-          <DropdownMenuRadioItem value="light">
+          <DropdownMenuRadioItem value="light" className={ITEM}>
             <Sun /> {s.themeLight}
           </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="dark">
+          <DropdownMenuRadioItem value="dark" className={ITEM}>
             <Moon /> {s.themeDark}
           </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="system">
+          <DropdownMenuRadioItem value="system" className={ITEM}>
             <Monitor /> {s.themeSystem}
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>

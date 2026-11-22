@@ -17,7 +17,7 @@ const en = {
   themeChoose: 'Choose light or dark mode',
   themeLight: 'Light',
   themeDark: 'Dark',
-  themeSystem: 'Match system',
+  themeSystem: 'System',
 
   crowdedLabel: 'Crowded or slightly crowded',
   crowdedCount: (count: number) => String(count),
@@ -36,6 +36,7 @@ const en = {
   quietestHint: 'Bars compare each place with the busiest one right now',
   barLabel: (percent: number) => `${percent}% of the busiest place right now`,
   range: (min: string, max: string) => `${min} to ${max}`,
+  rangePeople: (range: string) => `${range} people`,
 
   levels: { 붐빔: 'Crowded', '약간 붐빔': 'Slightly crowded', 보통: 'About normal', 여유: 'Relaxed' } as Record<string, string>,
   categories: {
@@ -91,7 +92,7 @@ const ko: Strings = {
   themeChoose: '화면 모드 선택',
   themeLight: '라이트',
   themeDark: '다크',
-  themeSystem: '시스템 설정',
+  themeSystem: '시스템',
 
   crowdedLabel: '붐빔 또는 약간 붐빔',
   crowdedCount: (count) => String(count),
@@ -110,6 +111,7 @@ const ko: Strings = {
   quietestHint: '막대는 지금 가장 붐비는 곳과 비교한 값입니다',
   barLabel: (percent) => `지금 가장 붐비는 곳의 ${percent}%`,
   range: (min, max) => `${min}~${max}명`,
+  rangePeople: (range) => range,
 
   levels: { 붐빔: '붐빔', '약간 붐빔': '약간 붐빔', 보통: '보통', 여유: '여유' },
   categories: {
@@ -169,7 +171,7 @@ export const formatPeople = (lang: Lang, value: number) => formatNumber(lang, Ma
 export const formatRange = (lang: Lang, range: { min: number; max: number }) =>
   STRINGS[lang].range(formatNumber(lang, range.min), formatNumber(lang, range.max))
 
-/** A place's name in the chosen language first, with the other language as the smaller line. */
+/** A place's name in the chosen language. The other language is only shown small, in the place panel. */
 export function placeNames(place: { name: string; label: string }, lang: Lang) {
   return lang === 'ko'
     ? { primary: place.name, secondary: place.label, secondaryLang: 'en' as const }

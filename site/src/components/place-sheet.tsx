@@ -33,10 +33,10 @@ export function PlaceSheet({ place, onClose }: { place: Current | null; onClose:
           <>
             <SheetHeader>
               <SheetTitle className="pr-8 text-xl">{names.primary}</SheetTitle>
-              <SheetDescription>
-                <span lang={names.secondaryLang}>{names.secondary}</span>
-                {category ? `, ${category}` : ''}
-              </SheetDescription>
+              <SheetDescription>{category}</SheetDescription>
+              <p className="text-xs text-muted-foreground/70" lang={names.secondaryLang}>
+                {names.secondary}
+              </p>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-6 px-4 pb-6">
