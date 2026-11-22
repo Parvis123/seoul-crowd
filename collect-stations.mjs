@@ -8,6 +8,7 @@
 //   - boardings and exits for each hour, as monthly totals, for the last 12 months
 //   - boardings and exits for each day, for the last 8 weeks
 //   - the English name of every station
+//   - where every station is
 // The city keeps this history itself, so nothing else is stored here and a
 // failed run loses nothing: the next run asks again.
 // Needs Node 18 or newer. No dependencies.
@@ -180,14 +181,32 @@ function labelFinder(nameRows) {
   };
 }
 
-async function previousLabels() {
-  if (!existsSync(OUT)) return new Map();
+async function previousFile() {
+  if (!existsSync(OUT)) return null;
   try {
-    const old = JSON.parse(await readFile(OUT, "utf8"));
-    return new Map(old.stations.filter((s) => s.label).map((s) => [s.station, s.label]));
+    return JSON.parse(await readFile(OUT, "utf8"));
   } catch {
-    return new Map();
+    return null;
   }
+}
+
+/**
+ * Where each station is, by name: { "서울역": [["1호선", 37.55623, 126.97214], ...] }.
+ * A station has one entry for each line, a short walk apart. Two different
+ * stations can share a name, which is why the line is kept.
+ */
+function readCoordinates(rows) {
+  const coordinates = {};
+  for (const row of rows) {
+    const name = baseName(String(row.BLDN_NM ?? "").trim());
+    const route = String(row.ROUTE ?? "").trim();
+    const lat = Number(row.LAT);
+    const lng = Number(row.LOT);
+    // A few rows have no position yet and say 0.
+    if (!name || !(lat > 30 && lat < 40 && lng > 120 && lng < 135)) continue;
+    (coordinates[name] ||= []).push([route, Math.round(lat * 1e5) / 1e5, Math.round(lng * 1e5) / 1e5]);
+  }
+  return coordinates;
 }
 
 // ---------- main ----------
@@ -210,6 +229,7 @@ async function main() {
   const monthResults = await pool(monthList, (month) => fetchRows("CardSubwayTime", month));
   const dayResults = await pool(dayList, (day) => fetchRows("CardSubwayStatsNew", day));
   const nameResult = await fetchRows("SearchSTNBySubwayLineInfo");
+  const placeResult = await fetchRows("subwayStationMaster");
 
   // ----- months -----
   const months = []; // newest first
@@ -245,8 +265,17 @@ async function main() {
     findLabel = labelFinder(nameResult.rows);
   } else {
     console.error(`  failed: station names (${nameResult.code || "NO-DATA"}) ${nameResult.message || ""}. Keeping the names saved last time.`);
-    const old = await previousLabels();
+    const old = new Map(((await previousFile())?.stations ?? []).filter((s) => s.label).map((s) => [s.station, s.label]));
     findLabel = (station) => old.get(station) ?? null;
+  }
+
+  // ----- positions -----
+  let coordinates;
+  if (placeResult.ok && placeResult.rows.length > 0) {
+    coordinates = readCoordinates(placeResult.rows);
+  } else {
+    console.error(`  failed: station positions (${placeResult.code || "NO-DATA"}) ${placeResult.message || ""}. Keeping the positions saved last time.`);
+    coordinates = (await previousFile())?.coordinates ?? {};
   }
 
   // ----- put it together -----
@@ -300,6 +329,7 @@ async function main() {
     months: monthOrder.map(dashed),
     days: days.length ? { from: dashed(days.at(-1).day), to: dashed(days[0].day), count: days.length } : null,
     stations,
+    coordinates,
   };
   await mkdir(path.dirname(OUT), { recursive: true });
   await writeFile(OUT, JSON.stringify(summary) + "\n");
@@ -309,10 +339,12 @@ async function main() {
   for (const s of stations) lines.set(s.line, (lines.get(s.line) || 0) + 1);
   const named = stations.filter((s) => s.label).length;
   const withWeekdays = stations.filter((s) => s.weekdays).length;
+  const hasPosition = (s) => [s.station, baseName(s.station), baseName(s.station).replace(/역$/, ""), `${baseName(s.station)}역`].some((name) => coordinates[name]);
+  const unplaced = [...new Set(stations.filter((s) => !hasPosition(s)).map((s) => s.station))];
   const report =
     `${stations.length} station rows on ${lines.size} lines for ${summary.month}; ` +
     `${months.length} months; ${days.length} days${summary.days ? ` (${summary.days.from} to ${summary.days.to})` : ""}; ` +
-    `${named} with an English name; ${withWeekdays} with weekday figures`;
+    `${named} with an English name; ${withWeekdays} with weekday figures; ${stations.length - stations.filter((s) => !hasPosition(s)).length} with a position`;
   console.log(report);
   console.log(`Lines: ${[...lines].map(([line, count]) => `${line} ${count}`).join(", ")}`);
   const unnamed = stations.filter((s) => !s.label).map((s) => s.station);
@@ -320,6 +352,7 @@ async function main() {
     const unique = [...new Set(unnamed)];
     console.log(`No English name found for ${unique.length}: ${unique.slice(0, 40).join(", ")}${unique.length > 40 ? ", and more" : ""}`);
   }
+  if (unplaced.length) console.log(`No position found for ${unplaced.length}: ${unplaced.slice(0, 40).join(", ")}${unplaced.length > 40 ? ", and more" : ""}`);
   if (process.env.GITHUB_ACTIONS) console.log(`::notice title=Station ridership::${report}`);
   if (days.length < DAYS / 2) console.error(`Only ${days.length} of ${DAYS} days came back, so the weekday figures are thin.`);
 }

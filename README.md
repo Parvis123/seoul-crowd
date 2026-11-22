@@ -34,13 +34,14 @@ SEOUL_API_KEY=your-key node collect.mjs
 
 ## Stations
 
-`collect-stations.mjs` uses three more datasets from the same portal, with the same key:
+`collect-stations.mjs` uses four more datasets from the same portal, with the same key:
 
 | Dataset | What it gives |
 | --- | --- |
 | `CardSubwayTime` | Boardings and exits for each station and hour, as a total for the month. A month appears a few days after it ends. |
 | `CardSubwayStatsNew` | Boardings and exits for each station and day, about three days behind. |
 | `SearchSTNBySubwayLineInfo` | The English name of each station. |
+| `subwayStationMaster` | Where each station is. |
 
 Each run asks for the last 12 months and the last 8 weeks, about 75 requests, and rewrites `data/stations.json`. The city keeps this history itself, so the collector stores nothing else and a failed run loses nothing.
 
@@ -49,6 +50,8 @@ In `data/stations.json`, each entry is one station on one line:
 - `on` and `off`: boardings and exits for an average day of the latest month, one number for each hour from 00 to 23.
 - `monthly`: boardings plus exits for each month listed in `months`.
 - `weekdays`: average boardings plus exits for each weekday, Monday first.
+
+`coordinates` lists where each station is, by name, with one position for each line that stops there.
 
 These are card taps at the gates, so they show how busy a station is, not how full the trains are. The hourly figures are monthly totals, so they cannot be split by weekday.
 
