@@ -5,18 +5,19 @@ import { toast } from 'sonner'
 import { useNetwork, usePlaces, useStations } from '@/api/queries'
 import { AllPlaces } from '@/components/all-places'
 import { LanguageToggle } from '@/components/language-toggle'
+import { CityMap } from '@/components/map/city-map'
 import { NowList } from '@/components/now-list'
 import { PlaceSheet } from '@/components/place-sheet'
+import { SearchBox } from '@/components/search-box'
 import { StationSheet } from '@/components/station-sheet'
 import { Stations } from '@/components/stations'
-import { Summary } from '@/components/summary'
 import { ThemeMenu } from '@/components/theme-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Toaster } from '@/components/ui/sonner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useLanguage } from '@/lib/i18n'
+import { formatPeople, useLanguage } from '@/lib/i18n'
 import type { Place } from '@/model/place'
 import type { Station } from '@/model/station'
 
@@ -24,7 +25,7 @@ import type { Station } from '@/model/station'
 type Selection = { kind: 'place'; code: string } | { kind: 'station'; key: string } | null
 
 function App() {
-  const { s } = useLanguage()
+  const { lang, s } = useLanguage()
   const places = usePlaces()
   const stations = useStations()
   const network = useNetwork()
@@ -52,15 +53,23 @@ function App() {
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{s.title}</h1>
             <div className="flex shrink-0 gap-2">
-              <Button variant="outline" onClick={refresh} disabled={places.isFetching} aria-label={s.update}>
+              <SearchBox network={network} onSelect={select} />
+              <Button variant="outline" size="icon" onClick={refresh} disabled={places.isFetching} aria-label={s.update} title={s.update}>
                 <RefreshCw className={places.isFetching ? 'animate-spin' : ''} />
-                <span className="hidden sm:inline">{s.update}</span>
               </Button>
               <LanguageToggle />
               <ThemeMenu />
             </div>
           </div>
-          <p className="mt-1 text-muted-foreground">{s.tagline}</p>
+          <p className="mt-1 text-muted-foreground">
+            {network && !network.places.isEmpty
+              ? `${s.statusLine(network.places.newestClock ?? '', network.places.crowdedCount, network.places.places.length)} ${
+                  network.places.mostPeople
+                    ? s.statusTop(network.places.mostPeople.name(lang), formatPeople(lang, network.places.mostPeople.people))
+                    : ''
+                }`
+              : s.tagline}
+          </p>
         </header>
 
         {places.isError && !network && (
@@ -72,12 +81,8 @@ function App() {
         )}
 
         {places.isPending && (
-          <div className="mt-8 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} className="h-28 rounded-xl" />
-              ))}
-            </div>
+          <div className="mt-6 space-y-8">
+            <Skeleton className="h-[24rem] rounded-xl sm:h-[32rem] lg:h-[36rem]" />
             <Skeleton className="h-96 rounded-xl" />
           </div>
         )}
@@ -91,8 +96,8 @@ function App() {
 
         {network && !network.places.isEmpty && (
           <>
-            <section className="mt-8">
-              <Summary places={network.places} />
+            <section className="mt-6">
+              <CityMap network={network} selected={openPlace ?? openStation} onSelect={select} />
             </section>
 
             <Tabs defaultValue="now" className="mt-8">
@@ -136,7 +141,7 @@ function App() {
             </Tabs>
 
             <p className="mt-8 text-sm text-muted-foreground">
-              {s.footer} {s.stationsSource}
+              {s.footer} {s.stationsSource} {s.mapSource}
             </p>
           </>
         )}

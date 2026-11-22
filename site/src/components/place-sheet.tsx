@@ -31,9 +31,11 @@ export function PlaceSheet({
   const recorded = place?.hoursRecorded ?? 0
   const other = place?.otherName(lang)
   return (
-    <Sheet open={place !== null} onOpenChange={(open) => !open && onClose()}>
+    <Sheet modal={false} open={place !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
-        className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl"
+        className="gap-0 outline-none data-[side=right]:w-full data-[side=right]:sm:max-w-xl"
+        // Clicking the map or a list behind the panel should change what it shows, not close it.
+        onInteractOutside={(event) => event.preventDefault()}
         onOpenAutoFocus={(event) => {
           // Keep focus on the panel itself so the first grid square's tooltip doesn't pop open.
           event.preventDefault()
