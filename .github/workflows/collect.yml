@@ -34,5 +34,5 @@ jobs:
             echo "Nothing new to save"
           else
             git commit -m "Add readings $(date -u +%Y-%m-%dT%H:%MZ)"
-            git push
+            git pull --rebase && git push
           fi
