@@ -46,7 +46,7 @@ export function PlaceSheet({
         {place && other && (
           <>
             <SheetHeader>
-              <SheetTitle className="pr-8 text-xl">{place.name(lang)}</SheetTitle>
+              <SheetTitle className="pr-8 font-display text-2xl">{place.name(lang)}</SheetTitle>
               <SheetDescription>{s.categories[place.category]}</SheetDescription>
               <p className="text-xs text-muted-foreground/70" lang={other.lang}>
                 {other.text}

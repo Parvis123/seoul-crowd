@@ -73,7 +73,7 @@ export function StationSheet({
         {station && other && figures && (
           <>
             <SheetHeader>
-              <SheetTitle className="pr-8 text-xl">{station.name(lang)}</SheetTitle>
+              <SheetTitle className="pr-8 font-display text-2xl">{station.name(lang)}</SheetTitle>
               <SheetDescription asChild>
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   {station.lines.map((line) => (
@@ -188,16 +188,22 @@ export function StationSheet({
                     <h3 className="font-medium">{s.linesTitle}</h3>
                     <ul className="space-y-2.5">
                       {station.lines.map((line) => {
-                        const total = station.ridershipOn(line).total()
+                        const total = station.gatesOn(line)?.total() ?? null
                         return (
                           <li key={line.id} className="grid grid-cols-[9.5rem_minmax(0,1fr)_4.5rem] items-center gap-3 text-sm">
                             <LineBadge line={line} named />
-                            <Progress
-                              value={(total / figures.total()) * 100}
-                              className="h-1.5 [&>[data-slot=progress-indicator]]:bg-heat"
-                              aria-hidden="true"
-                            />
-                            <span className="text-right tabular-nums">{number(total)}</span>
+                            {total === null ? (
+                              <span className="col-span-2 text-muted-foreground">{s.noOwnGates}</span>
+                            ) : (
+                              <>
+                                <Progress
+                                  value={(total / figures.total()) * 100}
+                                  className="h-1.5 [&>[data-slot=progress-indicator]]:bg-heat"
+                                  aria-hidden="true"
+                                />
+                                <span className="text-right tabular-nums">{number(total)}</span>
+                              </>
+                            )}
                           </li>
                         )
                       })}

@@ -9,7 +9,6 @@ import { useTheme } from 'next-themes'
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 
 import { LevelBadge } from '@/components/level-badge'
-import { LEVEL_DOT } from '@/components/level-colors'
 import { LineBadge } from '@/components/line-badge'
 import { BASEMAP_URL, type Theme, styleFor } from '@/components/map/basemap'
 import {
@@ -30,7 +29,6 @@ import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatNumber, formatRange, useLanguage } from '@/lib/i18n'
 import type { Network } from '@/model/network'
-import { CrowdLevel } from '@/model/place'
 
 // The map library does its heavy work in a background worker, and has to be told where the bundler put it.
 setWorkerUrl(workerUrl)
@@ -96,6 +94,8 @@ export function CityMap({
 
   const frame = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibre | null>(null)
+  // True until the reader moves the map. While it is, the map keeps the whole city in view as its frame changes size.
+  const followsFrame = useRef(true)
   // Goes up each time a style finishes loading, which is when this site's layers have to be added again.
   const [styleLoads, setStyleLoads] = useState(0)
   const [failed] = useState(() => !canDraw())
@@ -199,7 +199,13 @@ export function CityMap({
     map.on('style.load', onStyleLoad)
     map.on('mousemove', onMove)
     map.on('click', onClick)
-    map.on('movestart', () => setHover(null))
+    map.on('movestart', (event) => {
+      setHover(null)
+      // Only a drag, pinch or scroll carries the browser's own event.
+      if ('originalEvent' in event && event.originalEvent) followsFrame.current = false
+    })
+    // A page can lay itself out after the map is made. Until the reader takes over, fit the city again.
+    map.on('resize', () => followsFrame.current && map.fitBounds(SEOUL, { padding: 16, duration: 0 }))
     map.getCanvas().addEventListener('mouseleave', () => setHover(null))
     return map
   })
@@ -255,6 +261,7 @@ export function CityMap({
     // On a wide screen the panel covers the right of the map, so aim for the middle of what is left.
     const box = frame.current.getBoundingClientRect()
     const covered = window.innerWidth >= 640 ? Math.max(0, box.right - (window.innerWidth - 576)) : 0
+    followsFrame.current = false
     map.easeTo({
       center: [location.lng, location.lat],
       zoom: Math.max(map.getZoom(), 13.2),
@@ -265,6 +272,11 @@ export function CityMap({
   useEffect(() => {
     bringIntoView()
   }, [selectedId])
+
+  const zoom = (by: 1 | -1) => {
+    followsFrame.current = false
+    mapRef.current?.zoomTo(mapRef.current.getZoom() + by)
+  }
 
   const placed = placeData.features.length
   const total = network.places.places.length
@@ -304,32 +316,25 @@ export function CityMap({
         </ToggleGroup>
 
         <div className="absolute top-3 right-3 flex flex-col gap-1.5">
-          <Button variant="outline" size="icon-sm" className="bg-card" onClick={() => mapRef.current?.zoomIn()} aria-label={s.zoomIn}>
+          <Button variant="outline" size="icon-sm" className="bg-card" onClick={() => zoom(1)} aria-label={s.zoomIn}>
             <Plus />
           </Button>
-          <Button variant="outline" size="icon-sm" className="bg-card" onClick={() => mapRef.current?.zoomOut()} aria-label={s.zoomOut}>
+          <Button variant="outline" size="icon-sm" className="bg-card" onClick={() => zoom(-1)} aria-label={s.zoomOut}>
             <Minus />
           </Button>
           <Button
             variant="outline"
             size="icon-sm"
             className="bg-card"
-            onClick={() => mapRef.current?.fitBounds(SEOUL, { padding: 16 })}
+            onClick={() => {
+              followsFrame.current = true
+              mapRef.current?.fitBounds(SEOUL, { padding: 16 })
+            }}
             aria-label={s.zoomReset}
           >
             <Scan />
           </Button>
         </div>
-
-        {/* How to read the colours. The rest of the key is written under the map. */}
-        <ul className="absolute bottom-3 left-3 flex max-w-[calc(100%-5rem)] flex-wrap gap-x-3 gap-y-1 rounded-lg border bg-card/90 px-3 py-2 text-xs backdrop-blur-sm">
-          {CrowdLevel.all.map((level) => (
-            <li key={level.rank} className="flex items-center gap-1.5">
-              <span className={`size-2 rounded-full ${LEVEL_DOT[level.rank]}`} aria-hidden="true" />
-              {s.levels[level.korean]}
-            </li>
-          ))}
-        </ul>
 
         {hover && (
           <div

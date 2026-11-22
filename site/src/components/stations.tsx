@@ -55,7 +55,8 @@ export function Stations({
     return directory
       .on(line)
       .map((station) => {
-        const ridership = station.ridershipOn(line)
+        // Always the whole station: a line's own gates say which entrance people used, not which train.
+        const ridership = station.ridership
         return {
           station,
           ridership,
@@ -186,7 +187,7 @@ export function Stations({
 
         <p className="text-sm text-muted-foreground">
           {hour === null ? s.stationsHintDay(month) : s.stationsHintHour(month, s.hourRange(hour))}{' '}
-          {view === 'stations' && line ? s.lineGatesHint(line.name(lang)) : s.shinbundang}
+          {s.transfersHint} {view === 'stations' && line ? s.wholeStationHint : s.shinbundang}
         </p>
       </div>
 
@@ -239,12 +240,19 @@ export function Stations({
                         setView('stations')
                       }}
                       aria-label={s.byLineRow(lineName, name, number(entry.topCount))}
-                      className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:grid-cols-[11rem_minmax(0,1fr)_minmax(0,1.2fr)_6rem]"
+                      className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:grid-cols-[11rem_minmax(0,1.4fr)_minmax(0,1fr)_6rem]"
                     >
                       <span className="flex items-center gap-2 text-sm text-muted-foreground max-sm:col-span-2">
                         <LineBadge line={entry.line} named />
                       </span>
-                      <span className="truncate font-medium">{name}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{name}</span>
+                        {entry.next.length > 0 && (
+                          <span className="block truncate text-sm text-muted-foreground">
+                            {s.byLineThen(entry.next.map((station) => station.name(lang)))}
+                          </span>
+                        )}
+                      </span>
                       <Progress
                         value={(entry.topCount / Math.max(1, summaries[0].topCount)) * 100}
                         className="h-1.5 max-sm:order-last max-sm:col-span-2 [&>[data-slot=progress-indicator]]:bg-heat"

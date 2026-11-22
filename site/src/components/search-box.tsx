@@ -36,7 +36,7 @@ export function SearchBox({ network, onSelect }: { network: Network | null; onSe
 
   const typed = text.trim() !== ''
   const results = useMemo(
-    () => (network && typed ? network.search(text) : { places: network?.places.ranked.slice(0, 5) ?? [], stations: [] }),
+    () => (network && typed ? network.search(text) : { places: network?.places.byPeople.slice(0, 5) ?? [], stations: [] }),
     [network, text, typed],
   )
 

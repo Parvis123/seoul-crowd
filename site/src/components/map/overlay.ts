@@ -100,7 +100,8 @@ export function stationFeatures(stations: readonly Station[], lang: Lang) {
 /** One point for each place that has a position, coloured by its crowd level. */
 export function placeFeatures(network: Network, lang: Lang, theme: Theme) {
   const most = network.places.mostPeople?.people ?? 1
-  const features = network.places.ranked.flatMap((place, order): Feature[] => {
+  // Most people first, so big rings are drawn under small ones.
+  const features = network.places.byPeople.flatMap((place): Feature[] => {
     const location = network.locationOf(place)
     if (!location) return []
     return [
@@ -111,12 +112,14 @@ export function placeFeatures(network: Network, lang: Lang, theme: Theme) {
           id: idOf(place),
           name: place.name(lang),
           color: LEVEL_HEX[theme][place.level.rank],
-          order, // 0 is the busiest place
+          order: 0,
           r: 5 + 12 * Math.sqrt(place.people / most),
         },
       },
     ]
   })
+  // Counted among the places that are on the map: 0 is the biggest ring drawn.
+  features.forEach((feature, order) => (feature.properties.order = order))
   return collection(features)
 }
 
@@ -185,7 +188,7 @@ export function addOverlay(map: MapLibre, theme: Theme) {
     layout: { ...label, 'text-size': 11.5, 'text-offset': [0.9, 0], 'symbol-sort-key': ['-', 0, ['get', 'r']] },
     paint: text,
   })
-  // The five busiest places are always named. The rest appear once there is room for them.
+  // The five biggest rings are always named. The rest appear once there is room for them.
   map.addLayer({
     id: LAYER.placeNames,
     type: 'symbol',

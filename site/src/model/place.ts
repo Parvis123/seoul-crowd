@@ -44,17 +44,23 @@ export class CrowdLevel {
     new CrowdLevel(3, '붐빔'),
   ]
 
+  static readonly slightlyCrowded = CrowdLevel.all[2]
+  static readonly crowded = CrowdLevel.all[3]
+
   static from(korean: string): CrowdLevel {
     return CrowdLevel.all.find((level) => level.korean === korean) ?? CrowdLevel.all[0]
   }
 
-  /** Slightly crowded or crowded. */
-  get isCrowded(): boolean {
-    return this.rank >= 2
-  }
 }
 
 // ---------- a place ----------
+
+/** The city's English names, with their spacing and capitals put right. */
+const tidy = (label: string) =>
+  label
+    .replace(/(\S)\(/g, '$1 (')
+    .replace('SeokchonhosuLake', 'Seokchon Lake')
+    .replace('HongDae', 'Hongdae')
 
 /** One of the city's 121 places, with its latest reading and the history collected so far. */
 export class Place {
@@ -78,7 +84,7 @@ export class Place {
   constructor(raw: RawPlace & { latest: RawReading }) {
     this.code = raw.code
     this.officialName = raw.name
-    this.names = { ko: raw.name, en: raw.label }
+    this.names = { ko: raw.name, en: tidy(raw.label) }
     this.category = (categories as Record<string, string>)[raw.name] ?? ''
     this.level = CrowdLevel.from(raw.latest.level)
     this.range = { min: raw.latest.min, max: raw.latest.max }
@@ -141,12 +147,17 @@ export class Place {
   }
 
   /**
-   * Busiest first. For now this uses the city's own crowd level, with the
-   * estimated number of people as the tie-breaker. Once a few weeks of history
-   * exist it should compare each place with its own usual for this hour.
+   * Most crowded for its size first: the city's own crowd level, with the
+   * estimated number of people as the tie-breaker. A small market can come
+   * before a big district that holds ten times the people.
    */
-  static byBusiest(a: Place, b: Place): number {
+  static byCrowding(a: Place, b: Place): number {
     return b.level.rank - a.level.rank || b.people - a.people
+  }
+
+  /** Most people first, whatever the size of the place. */
+  static byPeople(a: Place, b: Place): number {
+    return b.people - a.people
   }
 }
 
@@ -179,9 +190,24 @@ export class PlaceDirectory {
     return this.places.length === 0
   }
 
-  /** Busiest first. */
-  get ranked(): Place[] {
-    return [...this.places].sort(Place.byBusiest)
+  /** Most people first. */
+  get byPeople(): Place[] {
+    return [...this.places].sort(Place.byPeople)
+  }
+
+  /** The places the city rates above relaxed, most crowded for their size first. */
+  get aboveRelaxed(): Place[] {
+    return this.places.filter((place) => place.level.rank > 0).sort(Place.byCrowding)
+  }
+
+  /** The places at one crowd level, most people first. */
+  at(level: CrowdLevel): Place[] {
+    return this.places.filter((place) => place.level === level).sort(Place.byPeople)
+  }
+
+  /** How many places are at each crowd level, relaxed first. */
+  get levelCounts(): { level: CrowdLevel; count: number }[] {
+    return CrowdLevel.all.map((level) => ({ level, count: this.places.filter((place) => place.level === level).length }))
   }
 
   /** The time of the newest reading, "HH:MM". */
@@ -193,9 +219,6 @@ export class PlaceDirectory {
     return this.places.length ? this.places.reduce((a, b) => (b.people > a.people ? b : a)) : undefined
   }
 
-  get crowdedCount(): number {
-    return this.places.filter((place) => place.level.isCrowded).length
-  }
 
   /** A place's people as a percentage of the place with the most people right now. */
   share(place: Place): number {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { Network } from '@/model/network'
-import { PlaceDirectory, type RawPlaceFile } from '@/model/place'
+import { CrowdLevel, PlaceDirectory, type RawPlaceFile } from '@/model/place'
 import { Ridership } from '@/model/ridership'
 import { type RawStationFile, StationDirectory } from '@/model/station'
 import { fold, initials, isInitials } from '@/model/text'
@@ -38,12 +38,20 @@ const stationFile: RawStationFile = {
     row('7호선', '이수', 'Isu', 18, 1500),
     row('경원선', '왕십리(성동구청)', 'Wangsimni', 18, 700),
     row('4호선', '명동', 'Myeong-dong', 18, 4000),
+    // Hapjeong is the bigger station, but most people there walk in through the Line 2 gates.
+    row('2호선', '합정', 'Hapjeong', 18, 6000),
+    row('6호선', '합정', 'Hapjeong', 18, 2000),
+    row('5호선', '공덕', 'Gongdeok', 18, 2500),
+    row('6호선', '공덕', 'Gongdeok', 18, 3000),
+    // Every tap at Yeonsinnae is filed under Line 3, though Line 6 stops there too.
+    row('3호선', '연신내', 'Yeonsinnae', 18, 7000),
     { ...row('7호선', '상동', 'Sang-dong', 0, 0), on: new Array(24).fill(0), off: new Array(24).fill(0) },
   ],
   coordinates: {
     홍대입구: [['2호선', 37.5572, 126.9245], ['경의중앙선', 37.558, 126.9254]],
     신촌: [['2호선', 37.5551, 126.9369], ['경의중앙선', 37.5597, 126.9426]],
     서울역: [['1호선', 37.5562, 126.9721]],
+    연신내: [['3호선', 37.6192, 126.921], ['6호선', 37.6186, 126.9206], ['수도권 광역급행철도', 37.6188, 126.9213]],
   },
 }
 
@@ -142,11 +150,32 @@ describe('StationDirectory', () => {
     expect(stations.get('명동')!.location).toBeNull()
   })
 
-  it('summarises each line by its own gates', () => {
+  it('counts a line\'s boardings at its own gates', () => {
     const line2 = stations.lineSummaries(null).find((summary) => summary.line.id === '2')!
-    expect(line2.stations).toBe(2)
+    expect(line2.stations).toBe(3)
     expect(line2.top.key).toBe('홍대입구')
-    expect(line2.on[18]).toBe(9010) // Hongdae's peak hour plus an ordinary hour at Sinchon
+    expect(line2.on[18]).toBe(15010) // the peak hour at Hongdae and Hapjeong, plus an ordinary hour at Sinchon
+  })
+
+  it('ranks the stations on a line by the whole station, not by whose gates people used', () => {
+    const hapjeong = stations.get('합정')!
+    const gongdeok = stations.get('공덕')!
+    const line6 = stations.lineSummaries(null).find((summary) => summary.line.id === '6')!
+    // Line 6's own gates are busier at Gongdeok, yet Hapjeong is the busier station.
+    expect(gongdeok.gatesOn(line6.line)!.total()).toBeGreaterThan(hapjeong.gatesOn(line6.line)!.total())
+    expect(line6.top.key).toBe('합정')
+    expect(line6.topCount).toBe(hapjeong.ridership.total())
+    expect(line6.next.map((station) => station.key)).toEqual(['연신내', '공덕'])
+  })
+
+  it('knows a line stops at a station even when it has no gates of its own there', () => {
+    const yeonsinnae = stations.get('연신내')!
+    const line6 = stations.lineSummaries(null).find((summary) => summary.line.id === '6')!
+    expect(yeonsinnae.lines.map((line) => line.id)).toEqual(['3', '6'])
+    expect(yeonsinnae.gatesOn(line6.line)).toBeNull()
+    expect(yeonsinnae.mainLine.id).toBe('3')
+    expect(stations.on(line6.line).map((station) => station.key)).toContain('연신내')
+    expect(line6.stations).toBe(3)
   })
 })
 
@@ -156,10 +185,21 @@ describe('PlaceDirectory', () => {
     expect(places.newestClock).toBe('21:00')
   })
 
-  it('ranks by crowd level first, then people', () => {
-    expect(places.ranked.map((p) => p.name('en'))[0]).toBe('Seoul Forest')
+  it('ranks by people, and separately by how crowded each place is for its size', () => {
+    expect(places.byPeople.map((p) => p.name('en'))).toEqual([
+      'Sinchon·Ewha Womans University station',
+      'Hongik University station (Line 2)',
+      'Seoul station',
+      'Seoul Forest',
+    ])
     expect(places.mostPeople!.name('ko')).toBe('신촌·이대역')
-    expect(places.crowdedCount).toBe(2)
+    // Seoul Forest holds the fewest people but is the most crowded for its size.
+    expect(places.aboveRelaxed.map((p) => p.name('en'))).toEqual(['Seoul Forest', 'Hongik University station (Line 2)', 'Seoul station'])
+  })
+
+  it('counts the places at each crowd level', () => {
+    expect(places.levelCounts.map((entry) => entry.count)).toEqual([1, 1, 1, 1])
+    expect(places.at(CrowdLevel.from('붐빔')).map((p) => p.name('en'))).toEqual(['Seoul Forest'])
   })
 })
 

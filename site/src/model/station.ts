@@ -41,6 +41,12 @@ const DISPLAY: Record<string, Record<Lang, string>> = {
   '양평@gj': { ko: '양평(경의중앙선)', en: 'Yangpyeong (Gyeongui-Jungang)' },
 }
 
+// English names the station list gives with a character or a space missing.
+const ENGLISH: Record<string, string> = {
+  동대문역사문화공원: 'Dongdaemun History & Culture Park',
+  경기광주: 'Gyeonggi Gwangju',
+}
+
 // Stations the position list still has under an older name.
 const OLD_NAMES: Record<string, string> = { 자양: '뚝섬유원지', 평택지제: '지제', 한국항공대: '화전' }
 
@@ -69,26 +75,32 @@ export class Station {
   readonly key: string
   /** The lines that stop here, in map order. */
   readonly lines: readonly Line[]
-  /** Every line's gates together. */
+  /** Everyone entering and leaving the station, through any line's gates. */
   readonly ridership: Ridership
   readonly location: LatLng | null
   private readonly names: Record<Lang, string>
-  private readonly byLine: ReadonlyMap<LineId, Ridership>
+  /**
+   * The city files each tap under the line that owns the gate, not the train the
+   * person rides. A line with no gates of its own here is missing from this map.
+   */
+  private readonly gates: ReadonlyMap<LineId, Ridership>
   private readonly terms: string[]
   private readonly koreanInitials: string
 
   constructor(init: {
     key: string
     names: Record<Lang, string>
-    byLine: ReadonlyMap<LineId, Ridership>
+    gates: ReadonlyMap<LineId, Ridership>
+    /** Lines the station list puts here that have no gates of their own. */
+    otherLines?: readonly Line[]
     location: LatLng | null
   }) {
     this.key = init.key
     this.names = init.names
-    this.byLine = init.byLine
+    this.gates = init.gates
     this.location = init.location
-    this.lines = Line.all.filter((line) => init.byLine.has(line.id))
-    this.ridership = Ridership.combine([...init.byLine.values()])
+    this.lines = Line.all.filter((line) => init.gates.has(line.id) || init.otherLines?.includes(line))
+    this.ridership = Ridership.combine([...init.gates.values()])
     const plainKey = init.key.replace(/@.*/, '')
     this.terms = [init.names.ko, init.names.en, plainKey, ...(NICKNAMES[plainKey] ?? [])].map(fold)
     this.koreanInitials = initials(init.names.ko)
@@ -105,17 +117,22 @@ export class Station {
   }
 
   serves(line: Line): boolean {
-    return this.byLine.has(line.id)
+    return this.lines.includes(line)
   }
 
-  /** One line's gates when a line is given and stops here, otherwise the whole station. */
-  ridershipOn(line: Line | null): Ridership {
-    return (line && this.byLine.get(line.id)) || this.ridership
+  /**
+   * The taps at one line's own gates, or null when the line has none here.
+   * This says which entrance people used, not which train: at Hapjeong most
+   * Line 6 riders walk in through the Line 2 gates.
+   */
+  gatesOn(line: Line): Ridership | null {
+    return this.gates.get(line.id) ?? null
   }
 
-  /** The line with the most riders here. Its colour stands for the station on the map. */
+  /** The line whose gates most people use. Its colour stands for the station on the map. */
   get mainLine(): Line {
-    return this.lines.reduce((best, line) => (this.ridershipOn(line).total() > this.ridershipOn(best).total() ? line : best))
+    const taps = (line: Line) => this.gatesOn(line)?.total() ?? 0
+    return this.lines.reduce((best, line) => (taps(line) > taps(best) ? line : best))
   }
 
   /**
@@ -132,14 +149,18 @@ export class Station {
 
 // ---------- every station ----------
 
+type Platform = LatLng & { line: Line | null }
+
 export type LineSummary = {
   line: Line
   stations: number
-  /** Boardings on the whole line for each clock hour. */
+  /** Boardings at the line's own gates for each clock hour. */
   on: number[]
-  /** The line's busiest station for the hour asked about, counting this line's gates only. */
+  /** The busiest station the line stops at for the hour asked about, counting the whole station. */
   top: Station
   topCount: number
+  /** The two stations after it. */
+  next: Station[]
 }
 
 /** Every station, built from the collector's file. */
@@ -176,7 +197,7 @@ export class StationDirectory {
 
       let draft = drafts.get(key)
       if (!draft) {
-        const names = DISPLAY[key] ?? { ko: plain, en: (row.label ?? plain).replaceAll('`', '’') }
+        const names = DISPLAY[key] ?? { ko: plain, en: ENGLISH[plain] ?? (row.label ?? plain).replaceAll('`', '’') }
         draft = { key, names, plain, rows: new Map() }
         drafts.set(key, draft)
       }
@@ -184,21 +205,36 @@ export class StationDirectory {
     }
 
     const stations = [...drafts.values()].map((draft) => {
-      const byLine = new Map([...draft.rows].map(([id, rows]) => [id, Ridership.combine(rows)]))
-      const lines = Line.all.filter((line) => byLine.has(line.id))
-      const location = StationDirectory.locate(draft.plain, lines, file.coordinates ?? {})
-      return new Station({ key: draft.key, names: draft.names, byLine, location })
+      const gates = new Map([...draft.rows].map(([id, rows]) => [id, Ridership.combine(rows)]))
+      const gateLines = Line.all.filter((line) => gates.has(line.id))
+      const platforms = StationDirectory.platforms(draft.key, draft.plain, file.coordinates ?? {})
+      const location = StationDirectory.locate(platforms, gateLines)
+      // The station list knows every line that stops here, including ones whose riders tap at another line's gates.
+      const otherLines = location
+        ? platforms.flatMap((entry) => (entry.line && kilometresBetween(entry, location) < 1 ? [entry.line] : []))
+        : []
+      return new Station({ key: draft.key, names: draft.names, gates, otherLines, location })
     })
     return new StationDirectory(stations, file)
   }
 
-  /** Where a station is: the middle of its platforms on the lines this site knows it by. */
-  private static locate(name: string, lines: readonly Line[], coordinates: NonNullable<RawStationFile['coordinates']>): LatLng | null {
+  /** The station list's entries for one station: a position for each line that stops there. */
+  private static platforms(key: string, name: string, coordinates: NonNullable<RawStationFile['coordinates']>): Platform[] {
+    const alsoListedAs = Object.keys(SAME_STATION).filter((other) => SAME_STATION[other] === name)
     const listed = [name, OLD_NAMES[name], name.replace(/역$/, ''), `${name}역`].find((candidate) => candidate && coordinates[candidate])
-    if (!listed) return null
-    const entries = coordinates[listed].map(([railway, lat, lng]) => ({ line: Line.forRailway(railway, name), lat, lng }))
-    const onOurLines = entries.filter((entry) => entry.line && lines.includes(entry.line))
-    const chosen = onOurLines.length ? onOurLines : entries
+    const entries = [listed, ...alsoListedAs]
+      .flatMap((each) => (each && coordinates[each]) || [])
+      .map(([railway, lat, lng]) => ({ line: Line.forRailway(railway, name), lat, lng }))
+    // Two different stations share this name, so each keeps only its own lines.
+    if (!SHARED_NAMES.has(name)) return entries
+    return entries.filter((entry) => (entry.line?.id === 'gj') === key.endsWith('@gj'))
+  }
+
+  /** Where a station is: the middle of its platforms on the lines its gates belong to. */
+  private static locate(platforms: Platform[], gateLines: readonly Line[]): LatLng | null {
+    if (!platforms.length) return null
+    const atOurGates = platforms.filter((entry) => entry.line && gateLines.includes(entry.line))
+    const chosen = atOurGates.length ? atOurGates : platforms
     const centre = centreOf(chosen)
     // If the entries are far apart they are different stations with one name, and the middle is nowhere.
     return chosen.every((entry) => kilometresBetween(entry, centre) < 1) ? centre : chosen[0]
@@ -217,14 +253,17 @@ export class StationDirectory {
     return line ? this.stations.filter((station) => station.serves(line)) : [...this.stations]
   }
 
-  /** For each line: its busiest station and its boardings through the day. Busiest line first. */
+  /**
+   * For each line: the busiest station it stops at, and the boardings at its own
+   * gates through the day. The line with the busiest station comes first.
+   */
   lineSummaries(hour: number | null): LineSummary[] {
     return this.lines
       .map((line) => {
         const stations = this.on(line)
-        const on = Array.from({ length: 24 }, (_, h) => stations.reduce((total, st) => total + st.ridershipOn(line).on[h], 0))
-        const top = stations.reduce((best, st) => (st.ridershipOn(line).total(hour) > best.ridershipOn(line).total(hour) ? st : best))
-        return { line, stations: stations.length, on, top, topCount: top.ridershipOn(line).total(hour) }
+        const on = Array.from({ length: 24 }, (_, h) => stations.reduce((total, st) => total + (st.gatesOn(line)?.on[h] ?? 0), 0))
+        const [top, ...next] = [...stations].sort((a, b) => b.ridership.total(hour) - a.ridership.total(hour))
+        return { line, stations: stations.length, on, top, topCount: top.ridership.total(hour), next: next.slice(0, 2) }
       })
       .sort((a, b) => b.topCount - a.topCount)
   }
