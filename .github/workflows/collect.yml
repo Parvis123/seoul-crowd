@@ -1,0 +1,38 @@
+name: Collect crowd readings
+
+on:
+  schedule:
+    - cron: "7 * * * *" # once an hour, at seven minutes past (UTC)
+  workflow_dispatch: # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch readings
+        run: node collect.mjs
+        env:
+          SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
+
+      - name: Save new readings to the repository
+        if: always()
+        run: |
+          git config user.name "crowd-collector"
+          git config user.email "crowd-collector@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "Nothing new to save"
+          else
+            git commit -m "Add readings $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi

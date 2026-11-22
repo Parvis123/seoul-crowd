@@ -1,0 +1,9 @@
+{
+  "places": [
+    { "name": "홍대입구역(2호선)", "label": "Hongdae station" },
+    { "name": "강남역", "label": "Gangnam station" },
+    { "name": "서울역", "label": "Seoul station" },
+    { "name": "광화문광장", "label": "Gwanghwamun Square" },
+    { "name": "광화문·덕수궁", "label": "Gwanghwamun and Deoksugung" }
+  ]
+}
