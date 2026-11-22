@@ -129,7 +129,10 @@ async function pool(items, task) {
 
 // ---------- reading rows ----------
 
-const keyOf = (line, station) => `${line}|${station}`;
+// "잠실(송파구청)" and "잠실" are the same station; the part in brackets is a second name
+// that the city sometimes changes, so stations are matched without it.
+const baseName = (name) => name.replace(/\s*\(.*?\)\s*/g, "").trim();
+const keyOf = (line, station) => `${line}|${baseName(station)}`;
 
 /** One row of CardSubwayTime: a station on a line, with a month's total for each hour. */
 function readHourly(row) {
@@ -156,8 +159,8 @@ function readDaily(row) {
 
 const sum = (list) => list.reduce((total, value) => total + value, 0);
 
-// "잠실(송파구청)" and "잠실" are the same station; the part in brackets is a second name.
-const baseName = (name) => name.replace(/\s*\(.*?\)\s*/g, "").trim();
+// "4.19민주묘지" and "4·19민주묘지" are the same name with different punctuation.
+const plain = (name) => name.replace(/[\s.·ㆍ]/g, "");
 
 /** Finds a station's English name, allowing for the small differences between the two lists. */
 function labelFinder(nameRows) {
@@ -166,11 +169,11 @@ function labelFinder(nameRows) {
     const korean = String(row.STATION_NM ?? "").trim();
     const english = String(row.STATION_NM_ENG ?? "").trim();
     if (!korean || !english) continue;
-    for (const name of [korean, baseName(korean)]) if (!names.has(name)) names.set(name, english);
+    for (const name of [korean, baseName(korean)].map(plain)) if (!names.has(name)) names.set(name, english);
   }
   return (station) => {
     const base = baseName(station);
-    for (const name of [station, base, base.replace(/역$/, ""), `${base}역`]) {
+    for (const name of [station, base, base.replace(/역$/, ""), `${base}역`].map(plain)) {
       if (names.has(name)) return names.get(name);
     }
     return null;
