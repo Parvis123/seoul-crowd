@@ -51,11 +51,8 @@ const en = {
   colKind: 'Kind',
   colLevel: 'Level',
   colPeople: 'People',
-  searchPlaceholder: 'Gangnam station',
-  searchLabel: 'Search places',
   filterLabel: 'Filter by kind of place',
   filterAll: 'All',
-  noMatch: 'No places match. Try a shorter search or a different kind of place.',
 
   panelNow: (range: string) => `About ${range} people`,
   panelAt: (time: string) => `at ${time} Seoul time`,
@@ -76,8 +73,6 @@ const en = {
   viewStations: 'Stations',
   viewLines: 'By line',
   viewLabel: 'Show stations or lines',
-  stationSearchPlaceholder: 'Hongik Univ.',
-  stationSearchLabel: 'Search stations',
   lineFilterLabel: 'Filter by line',
   allLines: 'All lines',
   timeLabel: 'Time of day',
@@ -98,7 +93,6 @@ const en = {
   colTotal: 'Total',
   showMore: (count: number) => `Show ${count} more`,
   showing: (shown: number, total: number) => `${shown} of ${total} stations`,
-  noStations: 'No stations match. Try a shorter search or a different line.',
   stationCount: (count: number) => `${count} stations`,
   crushTitle: 'Hardest time to get on',
   crushBody: (boardings: string) => `About ${boardings} people board across the line in that hour.`,
@@ -184,11 +178,8 @@ const ko: Strings = {
   colKind: '분류',
   colLevel: '혼잡도',
   colPeople: '인구',
-  searchPlaceholder: '강남역',
-  searchLabel: '장소 검색',
   filterLabel: '분류별로 보기',
   filterAll: '전체',
-  noMatch: '일치하는 장소가 없습니다. 검색어를 줄이거나 다른 분류를 선택해 보세요.',
 
   panelNow: (range) => `약 ${range}`,
   panelAt: (time) => `${time} 기준 (서울 시각)`,
@@ -209,8 +200,6 @@ const ko: Strings = {
   viewStations: '역별',
   viewLines: '노선별',
   viewLabel: '역별 또는 노선별로 보기',
-  stationSearchPlaceholder: '홍대입구',
-  stationSearchLabel: '역 검색',
   lineFilterLabel: '노선별로 보기',
   allLines: '전체 노선',
   timeLabel: '시간대',
@@ -231,7 +220,6 @@ const ko: Strings = {
   colTotal: '합계',
   showMore: (count) => `${count}개 더 보기`,
   showing: (shown, total) => `${total}개 역 중 ${shown}개`,
-  noStations: '일치하는 역이 없습니다. 검색어를 줄이거나 다른 노선을 선택해 보세요.',
   stationCount: (count) => `${count}개 역`,
   crushTitle: '가장 타기 힘든 시간',
   crushBody: (boardings) => `이 시간대에 노선 전체에서 약 ${boardings}명이 승차합니다.`,
@@ -295,13 +283,6 @@ export const formatPeople = (lang: Lang, value: number) => formatNumber(lang, Ma
 export const formatRange = (lang: Lang, range: { min: number; max: number }) =>
   STRINGS[lang].range(formatNumber(lang, range.min), formatNumber(lang, range.max))
 
-/** A place's name in the chosen language. The other language is only shown small, in the place panel. */
-export function placeNames(place: { name: string; label: string }, lang: Lang) {
-  return lang === 'ko'
-    ? { primary: place.name, secondary: place.label, secondaryLang: 'en' as const }
-    : { primary: place.label, secondary: place.name, secondaryLang: 'ko' as const }
-}
-
 const LOCALE: Record<Lang, string> = { en: 'en-GB', ko: 'ko-KR' }
 
 /** "2026-10" as "October 2026" or "2026년 10월". Pass `short` for an axis label such as "Oct". */
@@ -317,11 +298,4 @@ export function formatDay(lang: Lang, day: string) {
   return new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(
     new Date(Date.UTC(y, m - 1, d)),
   )
-}
-
-/** A station's name in the chosen language, with the other language for the panel's small line. */
-export function stationNames(station: { ko: string; en: string }, lang: Lang) {
-  return lang === 'ko'
-    ? { primary: station.ko, secondary: station.en, secondaryLang: 'en' as const }
-    : { primary: station.en, secondary: station.ko, secondaryLang: 'ko' as const }
 }

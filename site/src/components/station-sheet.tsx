@@ -17,18 +17,9 @@ import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import type { Current } from '@/lib/data'
-import {
-  formatCompact,
-  formatDay,
-  formatMonth,
-  formatNumber,
-  formatRange,
-  placeNames,
-  stationNames,
-  useLanguage,
-} from '@/lib/i18n'
-import { SERVICE_HOURS, type Station, type StationFile, busiestHour, busiestWeekday, count } from '@/lib/stations'
+import { formatCompact, formatDay, formatMonth, formatNumber, formatRange, useLanguage } from '@/lib/i18n'
+import type { Place } from '@/model/place'
+import type { Station, StationDirectory } from '@/model/station'
 
 const daysIn = (month: string) => {
   const [y, m] = month.split('-').map(Number)
@@ -37,16 +28,17 @@ const daysIn = (month: string) => {
 
 export function StationSheet({
   station,
-  file,
+  directory,
   places,
   onClose,
   onOpenPlace,
 }: {
   station: Station | null
-  file: StationFile
-  places: Current[] // the crowd places named after this station
+  directory: StationDirectory
+  /** The crowd places named after this station. */
+  places: Place[]
   onClose: () => void
-  onOpenPlace: (place: Current) => void
+  onOpenPlace: (place: Place) => void
 }) {
   const { lang, s } = useLanguage()
   const number = (value: number) => formatNumber(lang, value)
@@ -61,9 +53,9 @@ export function StationSheet({
   )
   const trendConfig = useMemo<ChartConfig>(() => ({ value: { label: s.trendSeries, color: 'var(--heat)' } }), [s])
 
-  const names = station ? stationNames(station, lang) : null
-  const figures = station?.all
-  const weekday = figures ? busiestWeekday(figures) : null
+  const other = station?.otherName(lang)
+  const figures = station?.ridership
+  const weekday = figures?.busiestWeekday ?? null
 
   return (
     <Sheet open={station !== null} onOpenChange={(open) => !open && onClose()}>
@@ -76,27 +68,27 @@ export function StationSheet({
         }}
         tabIndex={-1}
       >
-        {station && names && figures && (
+        {station && other && figures && (
           <>
             <SheetHeader>
-              <SheetTitle className="pr-8 text-xl">{names.primary}</SheetTitle>
+              <SheetTitle className="pr-8 text-xl">{station.name(lang)}</SheetTitle>
               <SheetDescription asChild>
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   {station.lines.map((line) => (
-                    <LineBadge key={line} line={line} named />
+                    <LineBadge key={line.id} line={line} named />
                   ))}
                 </div>
               </SheetDescription>
-              <p className="text-xs text-muted-foreground/70" lang={names.secondaryLang}>
-                {names.secondary}
+              <p className="text-xs text-muted-foreground/70" lang={other.lang}>
+                {other.text}
               </p>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1 [&>[data-slot=scroll-area-viewport]>div]:!block">
               <div className="space-y-6 px-4 pb-6">
                 <dl className="grid gap-2 sm:grid-cols-3 sm:gap-3">
                   {[
-                    [s.tileTotal, number(count(figures, null).total)],
-                    [s.tileHour, s.hourRange(busiestHour(figures))],
+                    [s.tileTotal, number(figures.total())],
+                    [s.tileHour, s.hourRange(figures.busiestHour)],
                     [s.tileDay, weekday === null ? s.none : s.daysLong[weekday]],
                   ].map(([label, value]) => (
                     <div
@@ -115,10 +107,10 @@ export function StationSheet({
                     {places.map((place) => (
                       <div key={place.code} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
                         <div className="min-w-0">
-                          <div className="truncate font-medium">{placeNames(place, lang).primary}</div>
+                          <div className="truncate font-medium">{place.name(lang)}</div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                            <LevelBadge level={place.latest.level} />
-                            <span className="tabular-nums">{s.rangePeople(formatRange(lang, place.latest))}</span>
+                            <LevelBadge level={place.level} />
+                            <span className="tabular-nums">{s.rangePeople(formatRange(lang, place.range))}</span>
                           </div>
                         </div>
                         <Button variant="outline" size="sm" onClick={() => onOpenPlace(place)}>
@@ -135,7 +127,7 @@ export function StationSheet({
                   <h3 className="font-medium">{s.dayChartTitle}</h3>
                   <ChartContainer config={dayConfig} className="h-56 w-full">
                     <LineChart
-                      data={SERVICE_HOURS.map((h) => ({ hour: s.hour(h), boardings: figures.on[h], exits: figures.off[h] }))}
+                      data={figures.throughTheDay.map((entry) => ({ ...entry, hour: s.hour(entry.hour) }))}
                       margin={{ left: 0, right: 12, top: 8 }}
                     >
                       <CartesianGrid vertical={false} />
@@ -167,10 +159,10 @@ export function StationSheet({
                       ))}
                     </LineChart>
                   </ChartContainer>
-                  <p className="text-sm text-muted-foreground">{s.dayChartHint(formatMonth(lang, file.month))}</p>
+                  <p className="text-sm text-muted-foreground">{s.dayChartHint(formatMonth(lang, directory.month))}</p>
                 </section>
 
-                {figures.weekdays && file.days && (
+                {figures.weekdays && directory.days && (
                   <section className="space-y-3">
                     <h3 className="font-medium">{s.weekdaysTitle}</h3>
                     <Columns
@@ -184,7 +176,7 @@ export function StationSheet({
                       }))}
                     />
                     <p className="text-sm text-muted-foreground">
-                      {s.weekdaysHint(formatDay(lang, file.days.from), formatDay(lang, file.days.to))}
+                      {s.weekdaysHint(formatDay(lang, directory.days.from), formatDay(lang, directory.days.to))}
                     </p>
                   </section>
                 )}
@@ -194,12 +186,12 @@ export function StationSheet({
                     <h3 className="font-medium">{s.linesTitle}</h3>
                     <ul className="space-y-2.5">
                       {station.lines.map((line) => {
-                        const total = count(station.byLine[line]!, null).total
+                        const total = station.ridershipOn(line).total()
                         return (
-                          <li key={line} className="grid grid-cols-[9.5rem_minmax(0,1fr)_4.5rem] items-center gap-3 text-sm">
+                          <li key={line.id} className="grid grid-cols-[9.5rem_minmax(0,1fr)_4.5rem] items-center gap-3 text-sm">
                             <LineBadge line={line} named />
                             <Progress
-                              value={(total / count(figures, null).total) * 100}
+                              value={(total / figures.total()) * 100}
                               className="h-1.5 [&>[data-slot=progress-indicator]]:bg-heat"
                               aria-hidden="true"
                             />
@@ -216,7 +208,7 @@ export function StationSheet({
                   <h3 className="font-medium">{s.trendTitle}</h3>
                   <ChartContainer config={trendConfig} className="h-44 w-full">
                     <AreaChart
-                      data={file.months.map((month, m) => ({
+                      data={directory.months.map((month, m) => ({
                         month: formatMonth(lang, month, true),
                         value: figures.monthly[m] === null ? null : Math.round(figures.monthly[m]! / daysIn(month)),
                       }))}

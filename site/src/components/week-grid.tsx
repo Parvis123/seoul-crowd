@@ -1,6 +1,6 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import type { Place } from '@/lib/data'
 import { formatPeople, useLanguage } from '@/lib/i18n'
+import type { Place } from '@/model/place'
 
 // Matches the weekday names Intl gives for en-GB, Monday first like the data.
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -20,7 +20,7 @@ function seoulNow() {
 
 /** One square per hour of the week. Brighter means busier, like lit windows. */
 export function WeekGrid({ place }: { place: Place }) {
-  const max = Math.max(0, ...place.grid.flat().filter((v): v is number => v !== null))
+  const max = place.weekPeak
   const now = seoulNow()
   const { lang, s } = useLanguage()
   return (

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { DaySpark } from '@/components/day-spark'
@@ -6,31 +6,23 @@ import { Columns } from '@/components/columns'
 import { LineBadge } from '@/components/line-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Progress } from '@/components/ui/progress'
 import { Slider } from '@/components/ui/slider'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { formatMonth, formatNumber, formatPeople, stationNames, useLanguage } from '@/lib/i18n'
-import {
-  LINES,
-  LINE_IDS,
-  type LineId,
-  SERVICE_HOURS,
-  type Station,
-  type StationFile,
-  busiestBoardingHour,
-  busiestHour,
-  count,
-  figuresFor,
-  summariseLines,
-} from '@/lib/stations'
+import { formatMonth, formatNumber, formatPeople, useLanguage } from '@/lib/i18n'
+import { Line, type LineId } from '@/model/line'
+import { SERVICE_HOURS } from '@/model/ridership'
+import type { Station, StationDirectory } from '@/model/station'
 
 type SortKey = 'name' | 'peak' | 'on' | 'off' | 'total'
 const PAGE = 40
 
 // 05:00 comes first on the slider and 01:00 last, the way a service day runs.
-const sliderOf = (hour: number) => SERVICE_HOURS.indexOf(hour)
+const sliderOf = (hour: number) => SERVICE_HOURS.indexOf(hour as (typeof SERVICE_HOURS)[number])
+
+/** The service hour with the most boardings in a list of 24. */
+const peakHour = (on: readonly number[]) => SERVICE_HOURS.reduce<number>((best, h) => (on[h] > on[best] ? h : best), SERVICE_HOURS[0])
 
 function seoulHour() {
   const hour = Number(
@@ -40,46 +32,46 @@ function seoulHour() {
 }
 
 export function Stations({
-  file,
-  stations,
+  directory,
   onSelect,
 }: {
-  file: StationFile
-  stations: Station[]
+  directory: StationDirectory
   onSelect: (station: Station) => void
 }) {
   const { lang, s } = useLanguage()
   const [view, setView] = useState<'stations' | 'lines'>('stations')
-  const [query, setQuery] = useState('')
-  const [line, setLine] = useState<LineId | null>(null)
+  const [line, setLine] = useState<Line | null>(null)
   const [hour, setHour] = useState<number | null>(null)
   const [sort, setSort] = useState<{ key: SortKey; down: boolean }>({ key: 'total', down: true })
   const [shown, setShown] = useState(PAGE)
 
-  const month = formatMonth(lang, file.month)
+  const month = formatMonth(lang, directory.month)
   const number = (value: number) => formatNumber(lang, value)
-  const lines = useMemo(() => LINE_IDS.filter((id) => stations.some((st) => st.byLine[id])), [stations])
-  const summaries = useMemo(() => summariseLines(stations, hour), [stations, hour])
+  const summaries = useMemo(() => directory.lineSummaries(hour), [directory, hour])
   const lineSummary = line ? summaries.find((entry) => entry.line === line) : undefined
 
   const rows = useMemo(() => {
-    const q = query.trim().toLowerCase()
     const dir = sort.down ? -1 : 1
-    return stations
-      .filter((st) => (!line || st.byLine[line]) && (q === '' || st.en.toLowerCase().includes(q) || st.ko.includes(q)))
+    return directory
+      .on(line)
       .map((station) => {
-        const figures = figuresFor(station, line)
-        return { station, figures, ...count(figures, hour), peak: busiestHour(figures) }
+        const ridership = station.ridershipOn(line)
+        return {
+          station,
+          ridership,
+          on: ridership.boardings(hour),
+          off: ridership.exits(hour),
+          total: ridership.total(hour),
+          peak: ridership.busiestHour,
+        }
       })
       .sort((a, b) => {
-        if (sort.key === 'name') {
-          return stationNames(a.station, lang).primary.localeCompare(stationNames(b.station, lang).primary, lang) * dir
-        }
+        if (sort.key === 'name') return a.station.name(lang).localeCompare(b.station.name(lang), lang) * dir
         // Sort the busiest hour as a service day runs, so 00:00 comes after 23:00.
         if (sort.key === 'peak') return (sliderOf(a.peak) - sliderOf(b.peak) || b.total - a.total) * dir
         return (a[sort.key] - b[sort.key]) * dir
       })
-  }, [stations, query, line, hour, sort, lang])
+  }, [directory, line, hour, sort, lang])
 
   const changeSort = (key: SortKey) => {
     setSort((current) => ({ key, down: current.key === key ? !current.down : key !== 'name' && key !== 'peak' }))
@@ -132,7 +124,7 @@ export function Stations({
               onValueChange={(value) => {
                 if (!value) return
                 const now = seoulHour()
-                setHour(value === 'day' ? null : SERVICE_HOURS.includes(now) ? now : 18)
+                setHour(value === 'day' ? null : sliderOf(now) >= 0 ? now : 18)
                 setShown(PAGE)
               }}
               aria-label={s.timeLabel}
@@ -163,54 +155,38 @@ export function Stations({
         </div>
 
         {view === 'stations' && (
-          <>
-            <InputGroup className="sm:max-w-xs">
-              <InputGroupAddon>
-                <Search />
-              </InputGroupAddon>
-              <InputGroupInput
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value)
-                  setShown(PAGE)
-                }}
-                placeholder={s.stationSearchPlaceholder}
-                aria-label={s.stationSearchLabel}
-              />
-            </InputGroup>
             <div className="max-sm:-mx-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:[scrollbar-width:none]">
-              <ToggleGroup
+            <ToggleGroup
                 type="single"
                 variant="outline"
                 size="sm"
                 spacing={1.5}
-                value={line ?? 'all'}
+                value={line?.id ?? 'all'}
                 onValueChange={(value) => {
-                  setLine(!value || value === 'all' ? null : (value as LineId))
+                  setLine(!value || value === 'all' ? null : Line.get(value as LineId))
                   setShown(PAGE)
                 }}
                 className="flex-wrap max-sm:flex-nowrap"
                 aria-label={s.lineFilterLabel}
               >
                 <ToggleGroupItem value="all">{s.allLines}</ToggleGroupItem>
-                {lines.map((id) => (
+                {directory.lines.map((each) => (
                   <ToggleGroupItem
-                    key={id}
-                    value={id}
-                    aria-label={LINES[id][lang]}
-                    className={LINES[id].digit ? 'px-1.5' : 'pr-2.5 pl-1.5'}
+                    key={each.id}
+                    value={each.id}
+                    aria-label={each.name(lang)}
+                    className={each.isNumbered ? 'px-1.5' : 'pr-2.5 pl-1.5'}
                   >
-                    <LineBadge line={id} named={!LINES[id].digit} />
+                    <LineBadge line={each} named={!each.isNumbered} />
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
             </div>
-          </>
         )}
 
         <p className="text-sm text-muted-foreground">
           {hour === null ? s.stationsHintDay(month) : s.stationsHintHour(month, s.hourRange(hour))}{' '}
-          {view === 'stations' && line ? s.lineGatesHint(LINES[line][lang]) : s.shinbundang}
+          {view === 'stations' && line ? s.lineGatesHint(line.name(lang)) : s.shinbundang}
         </p>
       </div>
 
@@ -223,14 +199,14 @@ export function Stations({
               </div>
               <p className="text-sm text-muted-foreground">{s.stationCount(lineSummary.stations)}</p>
               <p className="mt-4 text-sm text-muted-foreground">{s.crushTitle}</p>
-              <p className="text-2xl font-semibold tracking-tight">{s.hourRange(busiestBoardingHour(lineSummary.on))}</p>
+              <p className="text-2xl font-semibold tracking-tight">{s.hourRange(peakHour(lineSummary.on))}</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {s.crushBody(formatPeople(lang, Math.max(...lineSummary.on)))}{' '}
                 {s.crushNote}
               </p>
             </div>
             <Columns
-              label={s.crushChartLabel(LINES[line][lang])}
+              label={s.crushChartLabel(line.name(lang))}
               items={SERVICE_HOURS.map((h) => ({
                 id: String(h),
                 value: lineSummary.on[h],
@@ -251,15 +227,14 @@ export function Stations({
           <CardContent>
             <ol className="-mx-2">
               {summaries.map((entry) => {
-                const name = stationNames(entry.top, lang).primary
-                const lineName = LINES[entry.line][lang]
+                const name = entry.top.name(lang)
+                const lineName = entry.line.name(lang)
                 return (
-                  <li key={entry.line}>
+                  <li key={entry.line.id}>
                     <button
                       type="button"
                       onClick={() => {
                         setLine(entry.line)
-                        setQuery('')
                         setShown(PAGE)
                         setView('stations')
                       }}
@@ -301,7 +276,7 @@ export function Stations({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.slice(0, shown).map(({ station, figures, on, off, total, peak }) => (
+                  {rows.slice(0, shown).map(({ station, ridership, on, off, total, peak }) => (
                     <TableRow
                       key={station.key}
                       tabIndex={0}
@@ -317,17 +292,17 @@ export function Stations({
                       <TableCell className="py-3 pl-4">
                         <div className="flex items-center gap-2">
                           <span className="max-w-36 truncate font-medium sm:max-w-56">
-                            {stationNames(station, lang).primary}
+                            {station.name(lang)}
                           </span>
                           <span className="flex shrink-0 gap-1">
-                            {station.lines.map((id) => (
-                              <LineBadge key={id} line={id} />
+                            {station.lines.map((each) => (
+                              <LineBadge key={each.id} line={each} />
                             ))}
                           </span>
                         </div>
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
-                        <DaySpark figures={figures} hour={hour} />
+                        <DaySpark ridership={ridership} hour={hour} />
                       </TableCell>
                       <TableCell className="hidden text-muted-foreground tabular-nums sm:table-cell">
                         {s.hour(peak)}
@@ -341,13 +316,6 @@ export function Stations({
                       <TableCell className="pr-4 text-right tabular-nums">{number(total)}</TableCell>
                     </TableRow>
                   ))}
-                  {rows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                        {s.noStations}
-                      </TableCell>
-                    </TableRow>
-                  )}
                 </TableBody>
               </Table>
             </CardContent>
