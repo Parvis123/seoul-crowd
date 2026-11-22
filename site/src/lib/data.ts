@@ -24,23 +24,8 @@ export type Place = {
 
 export type Weekly = { generated_at: string; places: Place[] }
 
-export const LEVELS: Record<string, { label: string; rank: number }> = {
-  붐빔: { label: 'Crowded', rank: 3 },
-  '약간 붐빔': { label: 'Slightly crowded', rank: 2 },
-  보통: { label: 'About normal', rank: 1 },
-  여유: { label: 'Relaxed', rank: 0 },
-}
-
-export const CATEGORIES: Record<string, string> = {
-  인구밀집지역: 'Busy districts',
-  발달상권: 'Shopping areas',
-  공원: 'Parks',
-  관광특구: 'Tourist zones',
-  '고궁·문화유산': 'Palaces and heritage',
-}
-
-export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-export const DAYS_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+/** The city's four crowd levels, quietest to busiest. */
+export const LEVEL_RANK: Record<string, number> = { 붐빔: 3, '약간 붐빔': 2, 보통: 1, 여유: 0 }
 
 export async function loadWeekly(signal?: AbortSignal): Promise<Weekly> {
   const res = await fetch(DATA_URL, { cache: 'no-store', signal })
@@ -52,7 +37,6 @@ export type Current = Place & {
   latest: Latest
   people: number // middle of the estimated range
   rank: number // 0 relaxed to 3 crowded
-  levelLabel: string
   category: string
   fill: number // people here as a percentage of the busiest place right now
 }
@@ -75,8 +59,7 @@ export function currentPlaces(places: Place[]): Current[] {
     return {
       ...p,
       people,
-      rank: LEVELS[p.latest.level]?.rank ?? 0,
-      levelLabel: LEVELS[p.latest.level]?.label ?? p.latest.level,
+      rank: LEVEL_RANK[p.latest.level] ?? 0,
       category: (categories as Record<string, string>)[p.name] ?? '',
       fill: most > 0 ? Math.max(1, Math.round((people / most) * 100)) : 0,
     }
@@ -106,7 +89,3 @@ export function typicalDay(place: Place): { hour: string; people: number | null 
     }
   })
 }
-
-export const formatPeople = (n: number) => new Intl.NumberFormat('en-GB').format(Math.round(n / 100) * 100)
-export const formatRange = (l: Latest) =>
-  `${new Intl.NumberFormat('en-GB').format(l.min)} to ${new Intl.NumberFormat('en-GB').format(l.max)}`

@@ -1,5 +1,9 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { DAYS, DAYS_LONG, type Place, formatPeople } from '@/lib/data'
+import type { Place } from '@/lib/data'
+import { formatPeople, useLanguage } from '@/lib/i18n'
+
+// Matches the weekday names Intl gives for en-GB, Monday first like the data.
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 function seoulNow() {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -9,7 +13,7 @@ function seoulNow() {
     hour12: false,
   }).formatToParts(new Date())
   return {
-    weekday: DAYS.indexOf(parts.find((p) => p.type === 'weekday')!.value),
+    weekday: WEEKDAYS.indexOf(parts.find((p) => p.type === 'weekday')!.value),
     hour: Number(parts.find((p) => p.type === 'hour')!.value) % 24,
   }
 }
@@ -18,6 +22,7 @@ function seoulNow() {
 export function WeekGrid({ place }: { place: Place }) {
   const max = Math.max(0, ...place.grid.flat().filter((v): v is number => v !== null))
   const now = seoulNow()
+  const { lang, s } = useLanguage()
   return (
     <TooltipProvider delayDuration={80}>
       <div
@@ -26,10 +31,10 @@ export function WeekGrid({ place }: { place: Place }) {
       >
         {place.grid.map((row, d) => (
           <div key={d} className="contents">
-            <span className="text-xs text-muted-foreground">{DAYS[d]}</span>
+            <span className="text-xs text-muted-foreground">{s.days[d]}</span>
             {row.map((value, h) => {
-              const time = `${DAYS_LONG[d]} ${String(h).padStart(2, '0')}:00`
-              const text = value === null ? `${time}: no reading yet` : `${time}: about ${formatPeople(value)} people`
+              const time = `${s.daysLong[d]} ${String(h).padStart(2, '0')}:00`
+              const text = value === null ? s.cellEmpty(time) : s.cellPeople(time, formatPeople(lang, value))
               const isNow = d === now.weekday && h === now.hour
               return (
                 <Tooltip key={h}>

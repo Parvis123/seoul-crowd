@@ -7,11 +7,13 @@ import { Card, CardContent } from '@/components/ui/card'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { CATEGORIES, type Current, formatRange } from '@/lib/data'
+import type { Current } from '@/lib/data'
+import { formatRange, placeNames, useLanguage } from '@/lib/i18n'
 
-type SortKey = 'label' | 'category' | 'rank' | 'people'
+type SortKey = 'name' | 'category' | 'rank' | 'people'
 
 export function AllPlaces({ places, onSelect }: { places: Current[]; onSelect: (place: Current) => void }) {
+  const { lang, s } = useLanguage()
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [sort, setSort] = useState<{ key: SortKey; down: boolean }>({ key: 'people', down: true })
@@ -25,12 +27,14 @@ export function AllPlaces({ places, onSelect }: { places: Current[]; onSelect: (
     )
     const dir = sort.down ? -1 : 1
     return filtered.sort((a, b) => {
-      if (sort.key === 'label') return a.label.localeCompare(b.label) * dir
-      if (sort.key === 'category') return (CATEGORIES[a.category] ?? '').localeCompare(CATEGORIES[b.category] ?? '') * dir
+      if (sort.key === 'name')
+        return placeNames(a, lang).primary.localeCompare(placeNames(b, lang).primary, lang) * dir
+      if (sort.key === 'category')
+        return (s.categories[a.category] ?? '').localeCompare(s.categories[b.category] ?? '', lang) * dir
       if (sort.key === 'rank') return (a.rank - b.rank || a.people - b.people) * dir
       return (a.people - b.people) * dir
     })
-  }, [places, query, category, sort])
+  }, [places, query, category, sort, lang, s])
 
   const header = (key: SortKey, label: string, className = '') => {
     const active = sort.key === key
@@ -60,8 +64,8 @@ export function AllPlaces({ places, onSelect }: { places: Current[]; onSelect: (
           <InputGroupInput
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Gangnam station"
-            aria-label="Search places"
+            placeholder={s.searchPlaceholder}
+            aria-label={s.searchLabel}
           />
         </InputGroup>
         <ToggleGroup
@@ -71,10 +75,10 @@ export function AllPlaces({ places, onSelect }: { places: Current[]; onSelect: (
           value={category}
           onValueChange={(value) => setCategory(value || 'all')}
           className="flex-wrap"
-          aria-label="Filter by kind of place"
+          aria-label={s.filterLabel}
         >
-          <ToggleGroupItem value="all">All</ToggleGroupItem>
-          {Object.entries(CATEGORIES).map(([value, label]) => (
+          <ToggleGroupItem value="all">{s.filterAll}</ToggleGroupItem>
+          {Object.entries(s.categories).map(([value, label]) => (
             <ToggleGroupItem key={value} value={value}>
               {label}
             </ToggleGroupItem>
@@ -87,45 +91,48 @@ export function AllPlaces({ places, onSelect }: { places: Current[]; onSelect: (
           <Table>
             <TableHeader>
               <TableRow>
-                {header('label', 'Place', 'pl-4')}
-                {header('category', 'Kind', 'hidden md:table-cell')}
-                {header('rank', 'Level')}
-                {header('people', 'People', 'pr-4 text-right [&>button]:-mr-2.5 [&>button]:ml-0')}
+                {header('name', s.colPlace, 'pl-4')}
+                {header('category', s.colKind, 'hidden md:table-cell')}
+                {header('rank', s.colLevel)}
+                {header('people', s.colPeople, 'pr-4 text-right [&>button]:-mr-2.5 [&>button]:ml-0')}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((place) => (
-                <TableRow
-                  key={place.code}
-                  tabIndex={0}
-                  className="cursor-pointer"
-                  onClick={() => onSelect(place)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      onSelect(place)
-                    }
-                  }}
-                >
-                  <TableCell className="max-w-44 pl-4 sm:max-w-64 lg:max-w-96">
-                    <div className="truncate font-medium">{place.label}</div>
-                    <div className="truncate text-muted-foreground" lang="ko">
-                      {place.name}
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden text-muted-foreground md:table-cell">
-                    {CATEGORIES[place.category] ?? ''}
-                  </TableCell>
-                  <TableCell>
-                    <LevelBadge rank={place.rank} label={place.levelLabel} />
-                  </TableCell>
-                  <TableCell className="pr-4 text-right tabular-nums">{formatRange(place.latest)}</TableCell>
-                </TableRow>
-              ))}
+              {rows.map((place) => {
+                const names = placeNames(place, lang)
+                return (
+                  <TableRow
+                    key={place.code}
+                    tabIndex={0}
+                    className="cursor-pointer"
+                    onClick={() => onSelect(place)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onSelect(place)
+                      }
+                    }}
+                  >
+                    <TableCell className="max-w-44 pl-4 sm:max-w-64 lg:max-w-96">
+                      <div className="truncate font-medium">{names.primary}</div>
+                      <div className="truncate text-muted-foreground" lang={names.secondaryLang}>
+                        {names.secondary}
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
+                      {s.categories[place.category] ?? ''}
+                    </TableCell>
+                    <TableCell>
+                      <LevelBadge level={place.latest.level} />
+                    </TableCell>
+                    <TableCell className="pr-4 text-right tabular-nums">{formatRange(lang, place.latest)}</TableCell>
+                  </TableRow>
+                )
+              })}
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
-                    No places match. Try a shorter search or a different kind of place.
+                    {s.noMatch}
                   </TableCell>
                 </TableRow>
               )}

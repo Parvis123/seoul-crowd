@@ -1,4 +1,5 @@
 import { Info } from 'lucide-react'
+import { useMemo } from 'react'
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts'
 
 import { LevelBadge } from '@/components/level-badge'
@@ -8,12 +9,15 @@ import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } f
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { CATEGORIES, type Current, formatRange, typicalDay } from '@/lib/data'
-
-const chartConfig = { people: { label: 'People', color: 'var(--heat)' } } satisfies ChartConfig
+import { type Current, typicalDay } from '@/lib/data'
+import { formatRange, placeNames, useLanguage } from '@/lib/i18n'
 
 export function PlaceSheet({ place, onClose }: { place: Current | null; onClose: () => void }) {
+  const { lang, s } = useLanguage()
+  const chartConfig = useMemo<ChartConfig>(() => ({ people: { label: s.chartPeople, color: 'var(--heat)' } }), [s])
   const filled = place ? place.grid.flat().filter((v) => v !== null).length : 0
+  const names = place ? placeNames(place, lang) : null
+  const category = place ? s.categories[place.category] : undefined
   return (
     <Sheet open={place !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
@@ -25,47 +29,41 @@ export function PlaceSheet({ place, onClose }: { place: Current | null; onClose:
         }}
         tabIndex={-1}
       >
-        {place && (
+        {place && names && (
           <>
             <SheetHeader>
-              <SheetTitle className="pr-8 text-xl">{place.label}</SheetTitle>
-              <SheetDescription lang="ko">
-                {place.name}
-                {CATEGORIES[place.category] ? `, ${CATEGORIES[place.category]}` : ''}
+              <SheetTitle className="pr-8 text-xl">{names.primary}</SheetTitle>
+              <SheetDescription>
+                <span lang={names.secondaryLang}>{names.secondary}</span>
+                {category ? `, ${category}` : ''}
               </SheetDescription>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-6 px-4 pb-6">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <LevelBadge rank={place.rank} label={place.levelLabel} />
-                  <span className="tabular-nums">About {formatRange(place.latest)} people</span>
-                  <span className="text-sm text-muted-foreground">at {place.latest.time.slice(11)} Seoul time</span>
+                  <LevelBadge level={place.latest.level} />
+                  <span className="tabular-nums">{s.panelNow(formatRange(lang, place.latest))}</span>
+                  <span className="text-sm text-muted-foreground">{s.panelAt(place.latest.time.slice(11))}</span>
                 </div>
 
                 <Separator />
 
                 <section className="space-y-3">
-                  <h3 className="font-medium">The week here</h3>
+                  <h3 className="font-medium">{s.weekTitle}</h3>
                   <WeekGrid place={place} />
-                  <p className="text-sm text-muted-foreground">
-                    Brighter squares are busier hours. The outlined square is this hour.
-                  </p>
+                  <p className="text-sm text-muted-foreground">{s.weekHint}</p>
                 </section>
 
                 {filled < 168 && (
                   <Alert>
                     <Info />
-                    <AlertTitle>
-                      {filled} of 168 hours recorded so far
-                    </AlertTitle>
-                    <AlertDescription>
-                      A reading is saved every 20 minutes, so the week fills in over the next seven days.
-                    </AlertDescription>
+                    <AlertTitle>{s.hoursRecorded(filled)}</AlertTitle>
+                    <AlertDescription>{s.hoursRecordedHint}</AlertDescription>
                   </Alert>
                 )}
 
                 <section className="space-y-3">
-                  <h3 className="font-medium">A typical day</h3>
+                  <h3 className="font-medium">{s.dayTitle}</h3>
                   <ChartContainer config={chartConfig} className="h-44 w-full">
                     <AreaChart data={typicalDay(place)} margin={{ left: 20, right: 20, top: 8 }}>
                       <CartesianGrid vertical={false} />
@@ -83,9 +81,7 @@ export function PlaceSheet({ place, onClose }: { place: Current | null; onClose:
                       />
                     </AreaChart>
                   </ChartContainer>
-                  <p className="text-sm text-muted-foreground">
-                    Average people for each hour of the day, across the days recorded.
-                  </p>
+                  <p className="text-sm text-muted-foreground">{s.dayHint}</p>
                 </section>
               </div>
             </ScrollArea>
