@@ -39,7 +39,7 @@ What you are looking at is kept in the address, so any view can be sent to someo
 | `?tab=stations&line=6` | The stations on Line 6, busiest first |
 | `?tab=stations&view=lines` | The busiest stations on each line |
 | `?by=visitors` | The lists ranked by visitors |
-| `?station=이태원&from=상수` | Itaewon's panel with directions from Sangsu (`from=here` uses your position) |
+| `?station=이태원&from=합정` | Itaewon's panel with directions from Hapjeong (`from=here` uses your position) |
 | `?tab=stations&view=trains` | The fullest trains |
 | `?lang=ko` | The site in Korean |
 
