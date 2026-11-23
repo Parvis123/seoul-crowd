@@ -6,6 +6,7 @@ import { DaySpark } from '@/components/day-spark'
 import { LineBadge } from '@/components/line-badge'
 import { Button } from '@/components/ui/button'
 import { ByLine } from '@/components/stations/by-line'
+import { FullestTrains } from '@/components/stations/fullest-trains'
 import { LineSummaryCard } from '@/components/stations/line-summary-card'
 import { Card, CardContent } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
@@ -16,6 +17,8 @@ import { Line, type LineId } from '@/model/line'
 import { SERVICE_HOURS } from '@/model/ridership'
 import type { Station, StationDirectory } from '@/model/station'
 
+const VIEWS = ['stations', 'lines', 'trains'] as const
+type View = (typeof VIEWS)[number]
 type SortKey = 'name' | 'peak' | 'on' | 'off' | 'total'
 const PAGE = 40
 
@@ -40,11 +43,12 @@ export function Stations({
   const { lang, s } = useLanguage()
   // Which view and which line are part of the address, so a ranking can be linked to.
   const address = useAddress()
-  const view: 'stations' | 'lines' = address.get('view') === 'lines' ? 'lines' : 'stations'
+  const view = VIEWS.find((each) => each === address.get('view')) ?? 'stations'
   const asked = address.get('line')
   const line = Line.all.find((each) => each.id === asked) ?? null
-  const setView = (next: 'stations' | 'lines') => setAddress({ view: next === 'lines' ? 'lines' : null })
-  const setLine = (next: Line | null) => setAddress({ line: next?.id ?? null, view: null })
+  const setView = (next: View) => setAddress({ view: next === 'stations' ? null : next })
+  // Choosing a line from "By line" opens its stations. In the other two views the line is a filter and the view stays.
+  const setLine = (next: Line | null) => setAddress({ line: next?.id ?? null, view: view === 'trains' ? 'trains' : null })
   const [hour, setHour] = useState<number | null>(null)
   const [sort, setSort] = useState<{ key: SortKey; down: boolean }>({ key: 'total', down: true })
   const [shown, setShown] = useState(PAGE)
@@ -107,7 +111,7 @@ export function Stations({
             variant="outline"
             spacing={0}
             value={view}
-            onValueChange={(value) => value && setView(value as 'stations' | 'lines')}
+            onValueChange={(value) => value && setView(value as View)}
             aria-label={s.viewLabel}
           >
             <ToggleGroupItem value="stations" className="px-3">
@@ -116,9 +120,13 @@ export function Stations({
             <ToggleGroupItem value="lines" className="px-3">
               {s.viewLines}
             </ToggleGroupItem>
+            <ToggleGroupItem value="trains" className="px-3">
+              {s.trainsTab}
+            </ToggleGroupItem>
           </ToggleGroup>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {/* The hour applies to the gate counts. The trains view has its own figures for every half hour. */}
+          <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${view === 'trains' ? 'hidden' : ''}`}>
             <span className="text-sm text-muted-foreground">{s.timeLabel}</span>
             <ToggleGroup
               type="single"
@@ -159,7 +167,7 @@ export function Stations({
           </div>
         </div>
 
-        {view === 'stations' && (
+        {view !== 'lines' && (
             <div className="max-sm:-mx-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:[scrollbar-width:none]">
             <ToggleGroup
                 type="single"
@@ -195,7 +203,9 @@ export function Stations({
         </p>
       </div>
 
-      {view === 'stations' && lineSummary && <LineSummaryCard summary={lineSummary} />}
+      {view === 'stations' && lineSummary && <LineSummaryCard summary={lineSummary} directory={directory} />}
+
+      {view === 'trains' && <FullestTrains directory={directory} line={line} onSelect={onSelect} />}
 
       {view === 'lines' && (
         <ByLine

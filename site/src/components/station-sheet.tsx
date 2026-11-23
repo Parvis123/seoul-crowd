@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { type ReactNode, useMemo } from 'react'
 import { Area, AreaChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 
 import { Columns } from '@/components/columns'
 import { LevelBadge } from '@/components/level-badge'
 import { LineBadge } from '@/components/line-badge'
 import { PanelActions } from '@/components/panel-actions'
+import { TrainCrowdingSection } from '@/components/train-crowding'
 import { Button } from '@/components/ui/button'
 import {
   type ChartConfig,
@@ -33,6 +34,7 @@ export function StationSheet({
   places,
   onClose,
   onOpenPlace,
+  directions,
 }: {
   station: Station | null
   directory: StationDirectory
@@ -40,6 +42,8 @@ export function StationSheet({
   places: Place[]
   onClose: () => void
   onOpenPlace: (place: Place) => void
+  /** The "Getting here" section. */
+  directions?: ReactNode
 }) {
   const { lang, s } = useLanguage()
   const number = (value: number) => formatNumber(lang, value)
@@ -124,6 +128,10 @@ export function StationSheet({
                     ))}
                   </section>
                 )}
+
+                {directions}
+
+                <TrainCrowdingSection station={station} directory={directory} />
 
                 <Separator />
 

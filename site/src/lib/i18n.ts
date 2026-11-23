@@ -246,6 +246,48 @@ const en = {
   scrubNow: 'Now',
   scrubBack: 'Back to now',
 
+  // ---- directions
+  routeTitle: 'Getting here',
+  routeFromHere: 'From where I am',
+  routeFromStation: 'From a station',
+  routeSearch: 'Station name',
+  routeClear: 'Clear',
+  routeTotal: (minutes: number) => `About ${minutes} min`,
+  routeChanges: (count: number) => (count === 0 ? 'no changes' : count === 1 ? '1 change' : `${count} changes`),
+  routeFrom: (station: string) => `from ${station}`,
+  routeWalk: (minutes: number, station: string) => `Walk about ${minutes} min to ${station}`,
+  routeRide: (stops: number, minutes: number) => `${stops} ${stops === 1 ? 'stop' : 'stops'}, about ${minutes} min`,
+  routeToward: (station: string) => `toward ${station}`,
+  routeInner: 'inner loop, clockwise',
+  routeOuter: 'outer loop, anticlockwise',
+  routeBoard: (station: string) => `Board at ${station}`,
+  routeChange: (station: string, minutes: number) => `Change at ${station}, about ${minutes} min`,
+  routeArrive: (station: string) => `Get off at ${station}`,
+  routeFullNow: (percent: number) => `Trains this way are about ${percent}% full at this hour`,
+  routeNone: 'There is no way by subway on the lines this site has.',
+  routeSame: 'You are already at this station.',
+  routeNoStation: 'This place is not next to a station on this site, so there is no route here. The map links give directions.',
+  routeAsk: 'Choose where you are starting from.',
+  routeHint: 'Times are estimates from the distance between stations. There is no timetable in this data.',
+  routeKakao: 'Directions in Kakao Map',
+  routeGoogle: 'Directions in Google Maps',
+
+  // ---- how full the trains are
+  trainsTitle: 'How full the trains are',
+  trainsTab: 'Trains',
+  trainsDays: { weekday: 'Weekdays', saturday: 'Saturday', sunday: 'Sunday' } as Record<string, string>,
+  trainsDayLabel: 'Kind of day',
+  trainsBar: (time: string, percent: number) => `${time}: ${percent}% full`,
+  trainsPeak: (time: string, percent: number) => `Fullest at ${time}, ${percent}%.`,
+  trainsHint: (date: string) =>
+    `34% means every seat is taken. 100% is what a car is built to carry. Seoul Metro’s averages for each half hour, as of ${date}. Lines 1 to 8 only.`,
+  fullestTitle: 'The fullest trains',
+  fullestTrainsHint: 'The worst half hour for each station and direction. Choose a line above to see only its trains.',
+  fullestRow: (station: string, direction: string, time: string, percent: number) => `${station}, ${direction}: ${percent}% full at ${time}`,
+  trainsNone: 'Seoul Metro’s figures cover Lines 1 to 8. This line is not in them.',
+  crushRealTitle: 'Fullest trains',
+  crushRealBody: (station: string, direction: string, percent: number) => `At ${station}, ${direction}: ${percent}% of what a car is built for.`,
+
   // ---- how this works
   howTitle: 'How this works',
   how: [
@@ -259,7 +301,7 @@ const en = {
     },
     {
       title: 'Where the station numbers come from',
-      body: 'Transit card taps at the gates: a year of monthly totals by hour, and eight weeks of daily totals. They count people entering and leaving. Changing trains inside a station, and how full the trains are, are not in this data.',
+      body: 'Transit card taps at the gates: a year of monthly totals by hour, and eight weeks of daily totals. They count people entering and leaving, so changing trains inside a station is not in them. How full the trains are comes from Seoul Metro’s own half-hourly figures, for Lines 1 to 8.',
     },
     {
       title: 'What “usual” means',
@@ -503,6 +545,47 @@ const ko: Strings = {
   scrubNow: '지금',
   scrubBack: '지금으로 돌아가기',
 
+  // ---- directions
+  routeTitle: '여기로 가는 길',
+  routeFromHere: '현재 위치에서',
+  routeFromStation: '역에서 출발',
+  routeSearch: '역 이름',
+  routeClear: '지우기',
+  routeTotal: (minutes) => `약 ${minutes}분`,
+  routeChanges: (count) => (count === 0 ? '환승 없음' : `환승 ${count}회`),
+  routeFrom: (station) => `${station} 출발`,
+  routeWalk: (minutes, station) => `${station}까지 걸어서 약 ${minutes}분`,
+  routeRide: (stops, minutes) => `${stops}개 역, 약 ${minutes}분`,
+  routeToward: (station) => `${station} 방면`,
+  routeInner: '내선순환',
+  routeOuter: '외선순환',
+  routeBoard: (station) => `${station}에서 승차`,
+  routeChange: (station, minutes) => `${station}에서 환승, 약 ${minutes}분`,
+  routeArrive: (station) => `${station}에서 하차`,
+  routeFullNow: (percent) => `이 시간대 이 방향 열차 혼잡도는 약 ${percent}%입니다`,
+  routeNone: '이 사이트에 있는 노선으로는 갈 수 있는 길이 없습니다.',
+  routeSame: '이미 이 역에 있습니다.',
+  routeNoStation: '이 장소는 이 사이트의 지하철역과 연결되어 있지 않아 경로를 보여 줄 수 없습니다. 지도 링크에서 길찾기를 할 수 있습니다.',
+  routeAsk: '출발지를 선택해 주세요.',
+  routeHint: '소요 시간은 역 사이 거리로 추정한 값입니다. 이 데이터에는 시간표가 없습니다.',
+  routeKakao: '카카오맵에서 길찾기',
+  routeGoogle: 'Google 지도에서 길찾기',
+
+  // ---- how full the trains are
+  trainsTitle: '열차 혼잡도',
+  trainsTab: '열차',
+  trainsDays: { weekday: '평일', saturday: '토요일', sunday: '일요일' },
+  trainsDayLabel: '요일 구분',
+  trainsBar: (time, percent) => `${time}: 혼잡도 ${percent}%`,
+  trainsPeak: (time, percent) => `${time}에 가장 붐빕니다 (${percent}%).`,
+  trainsHint: (date) => `34%는 좌석이 모두 찬 상태, 100%는 정원입니다. 서울교통공사의 30분 단위 평균값이며 ${date} 기준입니다. 1~8호선만 제공됩니다.`,
+  fullestTitle: '가장 붐비는 열차',
+  fullestTrainsHint: '역과 방향별로 가장 붐비는 30분입니다. 위에서 노선을 선택하면 해당 노선만 볼 수 있습니다.',
+  fullestRow: (station, direction, time, percent) => `${station} ${direction}: ${time}에 혼잡도 ${percent}%`,
+  trainsNone: '서울교통공사 자료는 1~8호선만 포함합니다. 이 노선은 자료에 없습니다.',
+  crushRealTitle: '가장 붐비는 열차',
+  crushRealBody: (station, direction, percent) => `${station} ${direction}: 정원의 ${percent}%.`,
+
   // ---- how this works
   howTitle: '이 사이트는 이렇게 만들어집니다',
   how: [
@@ -516,7 +599,7 @@ const ko: Strings = {
     },
     {
       title: '지하철역 숫자의 출처',
-      body: '개찰구에서 찍힌 교통카드 기록입니다. 1년치 월별 시간대 합계와 8주치 일별 합계를 씁니다. 타고 내린 사람만 집계하며, 역 안에서의 환승과 열차 안의 혼잡은 이 데이터에 없습니다.',
+      body: '개찰구에서 찍힌 교통카드 기록입니다. 1년치 월별 시간대 합계와 8주치 일별 합계를 씁니다. 타고 내린 사람만 집계하므로 역 안에서의 환승은 포함되지 않습니다. 열차 혼잡도는 서울교통공사의 30분 단위 자료(1~8호선)를 사용합니다.',
     },
     {
       title: '‘평소’의 뜻',
@@ -565,6 +648,12 @@ export function formatMonth(lang: Lang, month: string, short = false) {
   const [y, m] = month.split('-').map(Number)
   const options: Intl.DateTimeFormatOptions = short ? { month: 'short' } : { month: 'long', year: 'numeric' }
   return new Intl.DateTimeFormat(LOCALE[lang], { ...options, timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, 1)))
+}
+
+/** "2026-09-30" as "30 September 2026" or "2026년 9월 30일". */
+export function formatDate(lang: Lang, day: string) {
+  const [y, m, d] = day.split('-').map(Number)
+  return new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, d)))
 }
 
 /** "2026-09-25" as "25 September" or "9월 25일". */

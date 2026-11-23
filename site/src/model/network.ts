@@ -1,4 +1,5 @@
 import { type LatLng, kilometresBetween } from '@/model/geo'
+import { type Journey, walkMinutes } from '@/model/journey'
 import type { Place, PlaceDirectory } from '@/model/place'
 import type { Station, StationDirectory } from '@/model/station'
 import { baseName, fold, isInitials } from '@/model/text'
@@ -71,6 +72,29 @@ export class Network {
       ...nearest(this.places.places, (place) => this.locationOf(place)),
       ...nearest(this.stations?.stations ?? [], (station) => station.location),
     ].sort((a, b) => a.km - b.km)
+  }
+
+  /**
+   * How to get to a place or station by subway, from a station or from a point
+   * on the map. From a point, the walk to each of the nearest few stations is
+   * tried and the quickest whole trip wins. Null when there is no way by subway.
+   */
+  journeyTo(target: Place | Station, origin: Station | LatLng): Journey | null {
+    const directory = this.stations
+    if (!directory) return null
+    const ends = target.kind === 'station' ? [target] : this.stationsFor(target)
+    const starts =
+      'kind' in origin
+        ? [{ station: origin, walk: 0 }]
+        : this.near(origin, 3).flatMap((each) => (each.item.kind === 'station' ? [{ station: each.item, walk: walkMinutes(each.km) }] : []))
+    let best: Journey | null = null
+    for (const start of starts) {
+      for (const end of ends) {
+        const journey = directory.journey(start.station, end)?.withWalks(start.walk, 0)
+        if (journey && (!best || journey.minutes < best.minutes)) best = journey
+      }
+    }
+    return best
   }
 
   /**

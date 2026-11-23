@@ -13,8 +13,19 @@ export type Column = {
  * A small column chart with the tallest column picked out, for "when is it busiest".
  * Pass `peakValue` to print the tallest column's figure above it.
  */
-export function Columns({ items, label, peakValue }: { items: Column[]; label: string; peakValue?: string }) {
-  const max = Math.max(1, ...items.map((item) => item.value))
+export function Columns({
+  items,
+  label,
+  peakValue,
+  scaleTo,
+}: {
+  items: Column[]
+  label: string
+  peakValue?: string
+  /** The value a full-height column stands for. Give the same one to several charts so their heights can be compared. */
+  scaleTo?: number
+}) {
+  const max = Math.max(1, scaleTo ?? 0, ...items.map((item) => item.value))
   const peak = items.reduce((best, item) => (item.value > best.value ? item : best), items[0])
   return (
     <TooltipProvider delayDuration={80}>

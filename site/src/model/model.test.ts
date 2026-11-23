@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { Network } from '@/model/network'
+import { TrainCrowding } from '@/model/crowding'
 import type { LatLng } from '@/model/geo'
+import { Router, TRANSFER_MINUTES, WAIT_MINUTES } from '@/model/journey'
+import { Line } from '@/model/line'
 import { Measure } from '@/model/measure'
 import { CrowdLevel, PlaceDirectory, type RawPlaceFile } from '@/model/place'
 import { type RawStop, buildRoutes } from '@/model/route'
@@ -306,7 +309,7 @@ describe('the order of stops along a line', () => {
   const at = (n: number): LatLng => ({ lat: 37.5 + n / 1000, lng: 127 })
   const where: Record<string, LatLng> = Object.fromEntries('abcdefghij'.split('').map((name, n) => [name, at(n)]))
   const routes = (stops: RawStop[]) => buildRoutes(stops, (_line, name) => where[name] ?? null)
-  const order = (path: LatLng[]) => path.map((point) => Object.keys(where).find((name) => where[name] === point)).join('')
+  const order = (path: { name: string }[]) => path.map((stop) => stop.name).join('')
 
   it('sorts by stop number, whatever order the list is in', () => {
     const [line3] = routes([['03호선', '312', 'c'], ['03호선', '310', 'a'], ['03호선', '311', 'b']])
@@ -341,5 +344,129 @@ describe('what is near a point', () => {
     const near = network.near({ lat: 37.5571, lng: 126.9245 }, 2) // beside Hongik University
     expect(near[0].item.name('en')).toMatch(/Hongik/)
     expect(near.every((each, i) => i === 0 || each.km >= near[i - 1].km)).toBe(true)
+  })
+})
+
+// ---------- directions ----------
+
+describe('getting from one station to another', () => {
+  const at = (n: number): LatLng => ({ lat: 37.5, lng: 127 + n / 100 }) // about 880 m apart
+  const stop = (name: string, n: number, oneWay = false) => ({ name, at: at(n), oneWay })
+  const lineA = Line.get('3')
+  const lineB = Line.get('4')
+  // Line A runs a-b-c-d. Line B crosses it at c: x-c-y. A second network is a loop that goes one way only.
+  const stationsFile: RawStationFile = {
+    generated_at: '',
+    month: '2026-10',
+    month_days: 31,
+    months: ['2026-10'],
+    days: null,
+    stations: ['a', 'b', 'c', 'd'].map((name) => row('3호선', name, name, 8, 100)).concat(['c', 'x', 'y'].map((name) => row('4호선', name, name, 8, 100))),
+  }
+  const directory = StationDirectory.fromFile(stationsFile)
+  const router = new Router(
+    [
+      { line: lineA, circle: false, paths: [[stop('a', 0), stop('b', 1), stop('c', 2), stop('d', 3)]] },
+      { line: lineB, circle: false, paths: [[stop('x', 12), stop('c', 2), stop('y', -8)]] },
+    ],
+    (_line, name) => directory.get(name) ?? null,
+  )
+  const station = (name: string) => directory.get(name)!
+
+  it('rides straight through when one line does it', () => {
+    const journey = router.between(station('a'), station('d'))!
+    expect(journey.changes).toBe(0)
+    expect(journey.rides.map((ride) => [ride.line.id, ride.fromName, ride.toName, ride.stops, ride.forward, ride.toward])).toEqual([['3', 'a', 'd', 3, true, 'd']])
+  })
+
+  it('knows which way the train is heading', () => {
+    const [ride] = router.between(station('d'), station('b'))!.rides
+    expect([ride.forward, ride.toward, ride.stops]).toEqual([false, 'a', 2])
+  })
+
+  it('changes lines where they cross, and counts the change in the time', () => {
+    const journey = router.between(station('a'), station('x'))!
+    expect(journey.legs.map((leg) => (leg.kind === 'ride' ? `${leg.line.id}:${leg.fromName}-${leg.toName}` : `change:${leg.name}`))).toEqual(['3:a-c', 'change:c', '4:c-x'])
+    const ridden = journey.rides.reduce((total, ride) => total + ride.minutes, 0)
+    expect(journey.minutes).toBe(Math.round(ridden + TRANSFER_MINUTES + WAIT_MINUTES))
+  })
+
+  it('adds the walk at either end to the total', () => {
+    const journey = router.between(station('a'), station('b'))!
+    expect(journey.withWalks(6, 0).minutes).toBe(journey.minutes + 6)
+  })
+
+  it('says so when there is no way, and when you are already there', () => {
+    const lonely = new Router([{ line: lineA, circle: false, paths: [[stop('a', 0), stop('b', 1)]] }], (_line, name) => directory.get(name) ?? null)
+    expect(lonely.between(station('a'), station('x'))).toBeNull()
+    expect(router.between(station('a'), station('a'))!.legs).toEqual([])
+  })
+
+  it('goes the long way round a loop that runs one way', () => {
+    const loop = new Router(
+      [{ line: lineA, circle: false, paths: [[stop('a', 0, true), stop('b', 1, true), stop('c', 2, true), stop('a', 0, true), stop('d', 3)]] }],
+      (_line, name) => directory.get(name) ?? null,
+    )
+    // c to b cannot go backwards: it has to pass a.
+    expect(loop.between(station('c'), station('b'))!.rides[0].stops).toBe(2)
+    expect(loop.between(station('b'), station('c'))!.rides[0].stops).toBe(1)
+  })
+})
+
+// ---------- how full the trains are ----------
+
+describe('train crowding', () => {
+  const slots = ['07:30', '08:00', '08:30']
+  const directory = StationDirectory.fromFile({
+    generated_at: '',
+    month: '2026-10',
+    month_days: 31,
+    months: ['2026-10'],
+    days: null,
+    stations: [row('2호선', '사당', 'Sadang', 8, 100), row('4호선', '사당', 'Sadang', 8, 100), row('2호선', '방배', 'Bangbae', 8, 100)],
+  })
+  const crowding = new TrainCrowding(
+    {
+      file: 'test.xlsx',
+      as_of: '2026-09-30',
+      slots,
+      rows: [
+        ['weekday', 2, '226', '사당', '외선', [90, 144.8, 120]],
+        ['weekday', 2, '226', '사당', '내선', [40, 60, 50]],
+        ['weekday', 2, '225', '방배', '내선', [30, 50, 146.3]],
+        ['sunday', 2, '226', '사당', '외선', [10, 20, 15]],
+        ['weekday', 2, '999', '어디에도없는역', '내선', [200, 200, 200]], // a stop the site does not know is left out
+      ],
+    },
+    (n) => Line.all.find((line) => line.digit === String(n)) ?? null,
+    (line, name) => directory.stationAt(line, name),
+  )
+  const line2 = Line.get('2')
+  const sadang = directory.get('사당')!
+
+  it('reads a station, direction, day and half hour', () => {
+    expect(crowding.at(line2, sadang, 'back', 'weekday', 1)).toBe(144.8) // the outer loop
+    expect(crowding.at(line2, sadang, 'on', 'weekday', 1)).toBe(60) // the inner loop
+    expect(crowding.at(line2, sadang, 'back', 'sunday', 1)).toBe(20)
+    expect(crowding.at(line2, sadang, 'back', 'saturday', 1)).toBeNull()
+  })
+
+  it('knows which lines it covers at a station', () => {
+    expect(crowding.covers(line2, sadang)).toBe(true)
+    expect(crowding.covers(Line.get('4'), sadang)).toBe(false)
+  })
+
+  it('ranks the fullest half hours, one for each station and direction', () => {
+    expect(crowding.peaks('weekday').map((peak) => [peak.station.key, peak.heading, peak.slot, peak.percent])).toEqual([
+      ['방배', 'on', '08:30', 146.3],
+      ['사당', 'back', '08:00', 144.8],
+      ['사당', 'on', '08:00', 60],
+    ])
+  })
+
+  it('finds the half hour a moment in Seoul falls in', () => {
+    expect(crowding.slotAt(new Date('2026-11-23T23:10:00Z'))).toBe(1) // 08:10 in Seoul
+    expect(crowding.slotAt(new Date('2026-11-23T03:00:00Z'))).toBeNull() // noon is outside this short table
+    expect(TrainCrowding.today(new Date('2026-11-21T03:00:00Z'))).toBe('saturday')
   })
 })

@@ -20,6 +20,7 @@ import {
   addOverlay,
   emptyCollection,
   hereFeature,
+  journeyFeatures,
   routeFeatures,
   idOf,
   placeFeatures,
@@ -33,6 +34,7 @@ import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatNumber, formatRange, useLanguage } from '@/lib/i18n'
 import type { LatLng } from '@/model/geo'
+import type { Journey } from '@/model/journey'
 import type { Network } from '@/model/network'
 
 // The map library does its heavy work in a background worker, and has to be told where the bundler put it.
@@ -89,6 +91,7 @@ export function CityMap({
   selected,
   here,
   step,
+  journey,
   onStep,
   onSelect,
   onLocate,
@@ -99,6 +102,8 @@ export function CityMap({
   here: LatLng | null
   /** How many hours into the city's forecast to draw the places. 0 is now. */
   step: number
+  /** A route to draw, when the reader has asked for directions. */
+  journey: Journey | null
   onStep: (step: number) => void
   onSelect: (item: Item) => void
   onLocate: () => void
@@ -252,16 +257,44 @@ export function CityMap({
     setData(map, SOURCE.routes, routeData)
   }, [styleLoads, stationData, placeData, routeData])
 
+  // A route: draw it, and pull back far enough to see all of it.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || styleLoads === 0) return
+    setData(map, SOURCE.journey, journeyFeatures(journey))
+  }, [styleLoads, journey])
+  useEffect(() => {
+    const points = journey?.rides.flatMap((ride) => ride.points) ?? []
+    if (!mapRef.current || points.length < 2 || !frame.current) return
+    const lngs = points.map((point) => point.lng)
+    const lats = points.map((point) => point.lat)
+    followsFrame.current = false
+    // On a wide screen the panel covers the right of the map, so the route is fitted into what is left.
+    const box = frame.current.getBoundingClientRect()
+    const covered = window.innerWidth >= 640 ? Math.max(0, box.right - (window.innerWidth - 576)) : 0
+    mapRef.current.fitBounds(
+      [
+        [Math.min(...lngs), Math.min(...lats)],
+        [Math.max(...lngs), Math.max(...lats)],
+      ],
+      { padding: { top: 70, bottom: 80, left: 60, right: 60 + Math.min(covered, box.width * 0.6) }, maxZoom: 14, duration: 700 },
+    )
+  }, [journey])
+
   // The reader's own position: mark it and move there.
   useEffect(() => {
     const map = mapRef.current
     if (!map || styleLoads === 0) return
     setData(map, SOURCE.here, hereFeature(here))
   }, [styleLoads, here])
-  useEffect(() => {
-    if (!here || !mapRef.current) return
+  const goToReader = useEffectEvent(() => {
+    // With a route on screen the camera is already showing all of it, the reader's end included.
+    if (!here || !mapRef.current || journey) return
     followsFrame.current = false
     mapRef.current.easeTo({ center: [here.lng, here.lat], zoom: Math.max(mapRef.current.getZoom(), 13.5), duration: 700 })
+  })
+  useEffect(() => {
+    goToReader()
   }, [here])
 
   useEffect(() => {
@@ -284,7 +317,8 @@ export function CityMap({
   // When something is chosen elsewhere on the page, bring it into view.
   const bringIntoView = useEffectEvent(() => {
     const map = mapRef.current
-    if (!map || !selected || !frame.current) return
+    // With a route on screen the camera is showing all of it, and the chosen station is its far end.
+    if (!map || !selected || !frame.current || journey) return
     const location = selected.kind === 'place' ? network.locationOf(selected) : selected.location
     if (!location) return
     // On a wide screen the panel covers the right of the map, so aim for the middle of what is left.

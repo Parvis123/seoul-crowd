@@ -22,7 +22,7 @@ The same three checks run on GitHub on every push to `dev` (`.github/workflows/s
 
 ## How it is put together
 
-- **`src/model`** holds everything the site knows, as plain classes with no React in them. `Place` and `Station` are the two things on the page. `PlaceDirectory` and `StationDirectory` build them from the collector's files and deal with the quirks in the city's data. `Network` joins the two: which places are named after which stations, what is near a point, and one search across both. `Measure` is a way to rank places (people, visitors, against usual). `route.ts` works out the order of stops along each line so the map can draw them.
+- **`src/model`** holds everything the site knows, as plain classes with no React in them. `Place` and `Station` are the two things on the page. `PlaceDirectory` and `StationDirectory` build them from the collector's files and deal with the quirks in the city's data. `Network` joins the two: which places are named after which stations, what is near a point, and one search across both. `Measure` is a way to rank places (people, visitors, against usual). `route.ts` works out the order of stops along each line so the map can draw them, `journey.ts` finds the quickest way between two stations over those stops, and `crowding.ts` holds how full the trains are.
 - **`src/api/queries.ts`** fetches the two data files with React Query and hands them to the model.
 - **`src/hooks`** holds the page's state, one concern each: what is open (`use-selection`), where the reader is (`use-nearby`), what they pinned (`use-pinned`).
 - **`src/components`** is the page, one section per file. `App.tsx` only arranges them. `map/` draws the map with MapLibre on OpenFreeMap tiles, and `page-skeleton.tsx` is the page in outline while the first readings load.
@@ -39,6 +39,8 @@ What you are looking at is kept in the address, so any view can be sent to someo
 | `?tab=stations&line=6` | The stations on Line 6, busiest first |
 | `?tab=stations&view=lines` | The busiest stations on each line |
 | `?by=visitors` | The lists ranked by visitors |
+| `?station=이태원&from=상수` | Itaewon's panel with directions from Sangsu (`from=here` uses your position) |
+| `?tab=stations&view=trains` | The fullest trains |
 | `?lang=ko` | The site in Korean |
 
 ## Installing it, and using it offline
@@ -50,3 +52,5 @@ The built site is a progressive web app: a browser can install it like an app, a
 - **Places:** the head count is the city's estimate from mobile phone data and includes residents at home, which is why the site also ranks by visitors and against each place's own usual.
 - **Stations:** card taps at the gates. A tap is filed under the line that owns the gate, not the train the person rides, and changing trains inside a station is not counted. So stations are ranked whole, and the per-line split is shown only as "which gates people use".
 - **Lines on the map** join the stations in order. They are not the exact track.
+- **Directions** are worked out on the page from the order of stops. Times are estimates from the distance between stations and a typical speed for each line, with fixed allowances for waiting and changing. There is no timetable in the data, so the links to Kakao Map and Google Maps are there for the exact trip.
+- **Train crowding** is Seoul Metro's average for each half hour on Lines 1 to 8, published a few times a year. It is a usual day, not this moment.

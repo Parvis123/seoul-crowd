@@ -4,6 +4,7 @@ import type { ExpressionSpecification, GeoJSONSource, Map as MapLibre } from 'ma
 import type { Theme } from '@/components/map/basemap'
 import type { Lang } from '@/lib/i18n'
 import type { LatLng } from '@/model/geo'
+import type { Journey } from '@/model/journey'
 import type { Network } from '@/model/network'
 import type { Place } from '@/model/place'
 import type { Route } from '@/model/route'
@@ -19,6 +20,7 @@ export const idOf = (item: Item) => item.id
 // and if those fail to arrive the library gives up on the whole source, which must not take the marks with it.
 export const SOURCE = {
   routes: 'crowd-routes',
+  journey: 'crowd-journey',
   here: 'crowd-here',
   stations: 'crowd-stations',
   places: 'crowd-places',
@@ -28,6 +30,8 @@ export const SOURCE = {
 } as const
 export const LAYER = {
   routes: 'crowd-routes',
+  journeyCasing: 'crowd-journey-casing',
+  journey: 'crowd-journey',
   hereHalo: 'crowd-here-halo',
   here: 'crowd-here',
   glow: 'crowd-place-glow',
@@ -140,8 +144,20 @@ export function routeFeatures(routes: readonly Route[]): FeatureCollection<Multi
     type: 'FeatureCollection',
     features: routes.map((route) => ({
       type: 'Feature',
-      geometry: { type: 'MultiLineString', coordinates: route.paths.map((path) => path.map((point) => [point.lng, point.lat])) },
+      geometry: { type: 'MultiLineString', coordinates: route.paths.map((path) => path.map((stop) => [stop.at.lng, stop.at.lat])) },
       properties: { color: route.line.color },
+    })),
+  }
+}
+
+/** A journey's rides, each a line in its own colour. */
+export function journeyFeatures(journey: Journey | null): FeatureCollection<MultiLineString> {
+  return {
+    type: 'FeatureCollection',
+    features: (journey?.rides ?? []).map((ride) => ({
+      type: 'Feature',
+      geometry: { type: 'MultiLineString', coordinates: [ride.points.map((point) => [point.lng, point.lat])] },
+      properties: { color: ride.line.color },
     })),
   }
 }
@@ -216,6 +232,21 @@ export function addOverlay(map: MapLibre, theme: Theme) {
     type: 'circle',
     source: SOURCE.selected,
     paint: { 'circle-radius': radius(1, 5), 'circle-opacity': 0, 'circle-stroke-color': ink, 'circle-stroke-width': 2 },
+  })
+  // A chosen route: its rides drawn thick over the network, with an edge so they stand off the lines beneath.
+  map.addLayer({
+    id: LAYER.journeyCasing,
+    type: 'line',
+    source: SOURCE.journey,
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': dark ? '#f4f6fb' : '#101828', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 6, 13, 9] },
+  })
+  map.addLayer({
+    id: LAYER.journey,
+    type: 'line',
+    source: SOURCE.journey,
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 3.5, 13, 6] },
   })
   // Where the reader is, when they have asked: a blue dot over the marks.
   map.addLayer({

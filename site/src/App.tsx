@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Toaster } from '@/components/ui/sonner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useJourney } from '@/hooks/use-journey'
 import { useNearby } from '@/hooks/use-nearby'
 import { useSelection } from '@/hooks/use-selection'
 import { useLanguage } from '@/lib/i18n'
@@ -32,6 +33,7 @@ function App() {
   const network = useNetwork()
   const open = useSelection(network)
   const nearby = useNearby(network)
+  const directions = useJourney(network, open.item, nearby.here)
   // How many hours into the city's forecast the map and headline are showing. 0 is now.
   const [step, setStep] = useState(0)
   const ready = network && !network.places.isEmpty ? network : null
@@ -77,6 +79,7 @@ function App() {
                   selected={open.item}
                   here={nearby.here}
                   step={step}
+                  journey={directions.journey}
                   onStep={setStep}
                   onSelect={open.select}
                   onLocate={nearby.locate}
@@ -118,7 +121,15 @@ function App() {
         )}
       </main>
 
-      <Panels network={network} place={open.place} station={open.station} onClose={open.close} onSelect={open.select} />
+      <Panels
+        network={network}
+        place={open.place}
+        station={open.station}
+        directions={directions}
+        nearby={nearby}
+        onClose={open.close}
+        onSelect={open.select}
+      />
       <Toaster />
     </>
   )

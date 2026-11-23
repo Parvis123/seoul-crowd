@@ -1,8 +1,15 @@
 import { type LatLng, kilometresBetween } from '@/model/geo'
 import { Line, type LineId } from '@/model/line'
 
-/** A line drawn through its stations: one path for the main run, and one for each branch. */
-export type Route = { line: Line; paths: LatLng[][] }
+/** One stop on a line: the station's name as the station list writes it, and where its platform is. */
+export type Stop = { name: string; at: LatLng; /** True for the stops of a loop that trains go round one way only. */ oneWay?: boolean }
+
+/**
+ * A line as the order of its stops: one path for the main run and one for each
+ * branch. Stops along a path are in rising stop-number order, which on Lines 1
+ * to 8 is the "down" direction (and the inner loop on Line 2).
+ */
+export type Route = { line: Line; paths: Stop[][]; /** True when the first path closes into a circle. */ circle: boolean }
 
 /** One row of the station list: line, stop number, station name. */
 export type RawStop = [line: string, code: string, station: string]
@@ -29,9 +36,9 @@ const LISTED_AS: Record<string, LineId> = {
 }
 
 /** A stop number taken apart: "P144-1" is prefix P, number 144, first stop of a spur. */
-type Stop = { code: string; prefix: string; number: number; spur: number | null; name: string }
+type NumberedStop = { code: string; prefix: string; number: number; spur: number | null; name: string }
 
-function parse([, code, name]: RawStop): Stop | null {
+function parse([, code, name]: RawStop): NumberedStop | null {
   const parts = /^([A-Z]*)(\d+)(?:-(\d+))?$/.exec(code)
   if (!parts) return null
   const [, prefix, digits, spur] = parts
@@ -40,19 +47,19 @@ function parse([, code, name]: RawStop): Stop | null {
   return { code, prefix, number, spur: spur ? Number(spur) : null, name }
 }
 
-const inOrder = (stops: Stop[]) => [...stops].sort((a, b) => a.number - b.number)
+const inOrder = (stops: NumberedStop[]) => [...stops].sort((a, b) => a.number - b.number)
 
 /**
  * The order of stops along a line. The stop numbers give most of it: a run of
  * numbers is a run of track, and "211-1, 211-2" is a spur leaving stop 211.
  * A few lines need telling how their runs join up.
  */
-function pathsFor(line: LineId, stops: Stop[]): Stop[][] {
+function pathsFor(line: LineId, stops: NumberedStop[]): NumberedStop[][] {
   const trunk = stops.filter((stop) => stop.spur === null)
   const run = (prefix: string, from = -Infinity, to = Infinity) =>
     inOrder(trunk.filter((stop) => stop.prefix === prefix && stop.number >= from && stop.number < to))
   const at = (code: string) => stops.filter((stop) => stop.code === code)
-  const paths: Stop[][] = []
+  const paths: NumberedStop[][] = []
 
   if (line === '2') {
     // A circle: the last stop runs on into the first.
@@ -83,7 +90,7 @@ function pathsFor(line: LineId, stops: Stop[]): Stop[][] {
   }
 
   // Spurs: "234-1, 234-2" leave the line at stop 234.
-  const spurs = new Map<string, Stop[]>()
+  const spurs = new Map<string, NumberedStop[]>()
   for (const stop of stops.filter((each) => each.spur !== null)) {
     const base = stop.code.slice(0, stop.code.lastIndexOf('-'))
     spurs.set(base, [...(spurs.get(base) ?? []), stop])
@@ -101,7 +108,7 @@ const LONGEST_HOP_KM = 30
  * `locate` says where a line's platform at a named station is, or null if unknown.
  */
 export function buildRoutes(stops: readonly RawStop[], locate: (line: Line, station: string) => LatLng | null): Route[] {
-  const byLine = new Map<LineId, Stop[]>()
+  const byLine = new Map<LineId, NumberedStop[]>()
   for (const raw of stops) {
     const id = LISTED_AS[raw[0]]
     const stop = id && parse(raw)
@@ -109,20 +116,21 @@ export function buildRoutes(stops: readonly RawStop[], locate: (line: Line, stat
   }
 
   return Line.all.flatMap((line) => {
-    const paths: LatLng[][] = []
+    const paths: Stop[][] = []
     for (const path of pathsFor(line.id, byLine.get(line.id) ?? [])) {
-      let piece: LatLng[] = []
+      let piece: Stop[] = []
       for (const stop of path) {
         const here = locate(line, stop.name)
         if (!here) continue // a stop with no known position is passed straight through
-        if (piece.length && kilometresBetween(piece[piece.length - 1], here) > LONGEST_HOP_KM) {
+        if (piece.length && kilometresBetween(piece[piece.length - 1].at, here) > LONGEST_HOP_KM) {
           if (piece.length > 1) paths.push(piece)
           piece = []
         }
-        piece.push(here)
+        // Line 6 trains go one way round the loop at its north-west end: 610 to 615, and 610 again.
+        piece.push({ name: stop.name, at: here, oneWay: line.id === '6' && stop.number >= 610 && stop.number <= 615 })
       }
       if (piece.length > 1) paths.push(piece)
     }
-    return paths.length ? [{ line, paths }] : []
+    return paths.length ? [{ line, paths, circle: line.id === '2' }] : []
   })
 }

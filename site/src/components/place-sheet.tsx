@@ -1,5 +1,5 @@
 import { Info } from 'lucide-react'
-import { useMemo } from 'react'
+import { type ReactNode, useMemo } from 'react'
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts'
 
 import { type Column, Columns } from '@/components/columns'
@@ -22,12 +22,15 @@ export function PlaceSheet({
   stations,
   onClose,
   onOpenStation,
+  directions,
 }: {
   place: Place | null
   /** The stations this place is named after. */
   stations: Station[]
   onClose: () => void
   onOpenStation: (station: Station) => void
+  /** The "Getting here" section. */
+  directions?: ReactNode
 }) {
   const { lang, s } = useLanguage()
   const chartConfig = useMemo<ChartConfig>(() => ({ people: { label: s.chartPeople, color: 'var(--heat)' } }), [s])
@@ -145,6 +148,8 @@ export function PlaceSheet({
                     ))}
                   </section>
                 )}
+
+                {directions}
 
                 <Separator />
 

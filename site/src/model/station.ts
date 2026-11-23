@@ -1,3 +1,4 @@
+import { type Journey, Router } from '@/model/journey'
 import { type RawStop, type Route, buildRoutes } from '@/model/route'
 import type { Lang } from '@/lib/i18n'
 import { type LatLng, centreOf, kilometresBetween } from '@/model/geo'
@@ -49,6 +50,9 @@ const ENGLISH: Record<string, string> = {
   동대문역사문화공원: 'Dongdaemun History & Culture Park',
   경기광주: 'Gyeonggi Gwangju',
 }
+
+// The ends of three lines lie outside the ridership data, which is where the English names come from.
+const LINE_ENDS_EN: Record<string, string> = { 진접: 'Jinjeop', 석남: 'Seongnam', 원시: 'Wonsi' }
 
 // Stations the position list still has under an older name.
 const OLD_NAMES: Record<string, string> = { 자양: '뚝섬유원지', 평택지제: '지제', 한국항공대: '화전' }
@@ -197,6 +201,39 @@ export class StationDirectory {
     this.months = file.months
     this.days = file.days
     this.byKey = new Map(stations.map((station) => [station.key, station]))
+  }
+
+  /** The station that a stop on a line is, going by the name the station list gives it. Null if the site has no figures for it. */
+  stationAt(line: Line, name: string): Station | null {
+    const plain = SAME_STATION[baseName(name)] ?? baseName(name)
+    const key = SHARED_NAMES.has(plain) && line.id === 'gj' ? `${plain}@gj` : plain
+    return [key, key.replace(/역$/, ''), `${key}역`].map((each) => this.byKey.get(each)).find(Boolean) ?? null
+  }
+
+  /** A stop's name for display. Three line ends have no ridership figures, so their English names are kept here. */
+  stopName(line: Line, name: string, lang: Lang): string {
+    return this.stationAt(line, name)?.name(lang) ?? (lang === 'en' ? (LINE_ENDS_EN[name] ?? name) : name)
+  }
+
+  // Built the first time someone asks for directions, since most visits never do.
+  private router: Router | null = null
+
+  /** The quickest way between two stations by subway, with estimated times, or null if the lines do not join them. */
+  journey(from: Station, to: Station): Journey | null {
+    this.router ??= new Router(this.routes, (line, name) => this.stationAt(line, name))
+    return this.router.between(from, to)
+  }
+
+  /**
+   * Where a line's trains are heading from a station, as station names: `back`
+   * is the direction of falling stop numbers ("up" on Lines 1 to 8) and `on`
+   * of rising ones ("down"). Null on a circle, or if the station is not on the line.
+   */
+  ends(line: Line, station: Station): { back: string; on: string } | null {
+    const route = this.routes.find((each) => each.line === line)
+    const path = route?.paths.find((each) => each.some((stop) => this.stationAt(line, stop.name)?.key === station.key))
+    if (!route || !path || (route.circle && path === route.paths[0])) return null
+    return { back: path[0].name, on: path[path.length - 1].name }
   }
 
   static fromFile(file: RawStationFile): StationDirectory {
