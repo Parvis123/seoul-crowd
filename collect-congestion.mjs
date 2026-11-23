@@ -91,31 +91,45 @@ const textOf = (xml) => [...xml.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map
 /** "C" -> 2, "AA" -> 26. */
 const columnIndex = (letters) => [...letters].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
 
-/** The first sheet of a workbook as rows of cells: strings, numbers, or undefined for an empty cell. */
+// Some spreadsheet writers put a prefix on every tag (<x:row> for <row>). Dropping it leaves one form to read.
+const plain = (xml) => (xml ?? "").replace(/<(\/?)[A-Za-z][\w]*:/g, "<$1");
+
+/** Every sheet of a workbook, in order, as its name and rows of cells: strings, numbers, or undefined for an empty cell. */
 function readXlsx(buffer) {
   const zip = unzip(buffer);
-  const shared = [...(zip.read("xl/sharedStrings.xml") ?? "").matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => textOf(m[1]));
-  const sheetName = zip.names.filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)).sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
-  const sheet = sheetName && zip.read(sheetName);
-  if (!sheet) throw new Error(`the workbook has no sheet. It holds: ${zip.names.join(", ")}`);
-  if (!/<row\b/.test(sheet)) throw new Error(`the sheet has no rows this script can read. It holds: ${zip.names.join(", ")}. It starts: ${sheet.slice(0, 400)}`);
-  const rows = [];
-  for (const [, rowXml] of sheet.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
-    const row = [];
-    for (const [, attrs, inner] of rowXml.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
-      const ref = /\br="([A-Z]+)\d+"/.exec(attrs);
-      const type = /\bt="(\w+)"/.exec(attrs)?.[1];
-      const raw = /<v>([\s\S]*?)<\/v>/.exec(inner ?? "")?.[1];
-      let value;
-      if (type === "s") value = shared[Number(raw)];
-      else if (type === "inlineStr") value = textOf(inner ?? "");
-      else if (type === "str") value = raw === undefined ? undefined : unescape(raw);
-      else if (raw !== undefined && raw !== "") value = Number(raw);
-      row[ref ? columnIndex(ref[1]) : row.length] = value;
-    }
-    rows.push(row);
+  const shared = [...plain(zip.read("xl/sharedStrings.xml")).matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => textOf(m[1]));
+
+  // The workbook lists the sheets by name, and a second file says which XML file each one is.
+  const targets = new Map([...plain(zip.read("xl/_rels/workbook.xml.rels")).matchAll(/<Relationship\b[^>]*>/g)].map(([tag]) => [/\bId="([^"]+)"/.exec(tag)?.[1], /\bTarget="([^"]+)"/.exec(tag)?.[1]]));
+  let sheets = [...plain(zip.read("xl/workbook.xml")).matchAll(/<sheet\b[^>]*>/g)].map(([tag]) => {
+    const target = targets.get(/\b(?:r:)?id="([^"]+)"/.exec(tag)?.[1]) ?? "";
+    return { name: unescape(/\bname="([^"]*)"/.exec(tag)?.[1] ?? ""), file: target.startsWith("/") ? target.slice(1) : `xl/${target}` };
+  }).filter((sheet) => zip.names.includes(sheet.file));
+  // If that listing cannot be followed, take the sheet files in number order.
+  if (sheets.length === 0) {
+    sheets = zip.names.filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)).sort((a, b) => a.length - b.length || a.localeCompare(b)).map((file) => ({ name: "", file }));
   }
-  return rows;
+  if (sheets.length === 0) throw new Error(`the workbook has no sheet. It holds: ${zip.names.join(", ")}`);
+
+  return sheets.map(({ name, file }) => {
+    const rows = [];
+    for (const [, rowXml] of plain(zip.read(file)).matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+      const row = [];
+      for (const [, attrs, inner] of rowXml.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const ref = /\br="([A-Z]+)\d+"/.exec(attrs);
+        const type = /\bt="(\w+)"/.exec(attrs)?.[1];
+        const raw = /<v>([\s\S]*?)<\/v>/.exec(inner ?? "")?.[1];
+        let value;
+        if (type === "s") value = shared[Number(raw)];
+        else if (type === "inlineStr") value = textOf(inner ?? "");
+        else if (type === "str") value = raw === undefined ? undefined : unescape(raw);
+        else if (raw !== undefined && raw !== "") value = Number(raw);
+        row[ref ? columnIndex(ref[1]) : row.length] = value;
+      }
+      rows.push(row);
+    }
+    return { name, rows };
+  });
 }
 
 /** A .csv file as rows of cells. Older files are in the Korean EUC-KR encoding, newer ones in UTF-8. */
@@ -169,7 +183,10 @@ const DAYS = [
   [/일|공휴/, "sunday"],
 ];
 
-function toTable(rows) {
+const dayOf = (text) => DAYS.find(([pattern]) => pattern.test(String(text ?? "")))?.[1];
+
+/** Reads one sheet. `sheetDay` is the day its name gives, for files that keep each kind of day on its own sheet. */
+function toTable(rows, sheetDay) {
   // The heading row is the first one with a station column and several time columns.
   const headAt = rows.findIndex((row) => row.filter((cell) => slotOf(cell)).length >= 10 && row.some((cell) => /역/.test(String(cell ?? ""))));
   if (headAt < 0) {
@@ -180,17 +197,17 @@ function toTable(rows) {
   const find = (pattern) => head.findIndex((cell) => typeof cell === "string" && pattern.test(cell));
   const column = { day: find(/요일/), line: find(/호선/), code: find(/역번호/), station: find(/역명|출발역|^역$/), direction: find(/상하|구분$|방향/) };
   if (column.direction === column.day) column.direction = head.findIndex((cell, i) => i !== column.day && typeof cell === "string" && /상하|방향|구분/.test(cell));
-  const missing = Object.entries(column).filter(([, at]) => at < 0).map(([name]) => name);
+  const missing = Object.entries(column).filter(([name, at]) => at < 0 && !(name === "day" && sheetDay)).map(([name]) => name);
   if (missing.length) throw new Error(`could not find these columns: ${missing.join(", ")}. The headings are: ${JSON.stringify(head.slice(0, 10))}`);
   const slotColumns = head.map((cell, at) => ({ at, slot: slotOf(rows[headAt][at]) })).filter((each) => each.slot);
 
   const table = [];
   for (const row of rows.slice(headAt + 1)) {
-    const day = DAYS.find(([pattern]) => pattern.test(String(row[column.day] ?? "")))?.[1];
+    const day = column.day >= 0 ? dayOf(row[column.day]) : sheetDay;
     const line = Number(/\d+/.exec(String(row[column.line] ?? ""))?.[0]);
     const station = String(row[column.station] ?? "").trim();
     const direction = String(row[column.direction] ?? "").trim();
-    if (!day || !(line >= 1 && line <= 9) || !station || !direction) continue;
+    if (!day || !(line >= 1 && line <= 9) || !station || !direction || station === String(head[column.station])) continue;
     // One decimal place is all the figures are good for. An empty cell means no trains in that half hour.
     const values = slotColumns.map(({ at }) => (typeof row[at] === "number" ? Math.round(row[at] * 10) / 10 : null));
     table.push([day, line, String(row[column.code] ?? "").trim(), station, direction, values]);
@@ -218,8 +235,13 @@ async function main() {
   const buffer = await download(file);
   console.log(`Downloaded ${buffer.length} bytes`);
   // Go by what the file is, not what it is called: a zip starts with "PK".
-  const rows = buffer[0] === 0x50 && buffer[1] === 0x4b ? readXlsx(buffer) : readCsv(buffer);
-  const { slots, table } = toTable(rows);
+  const sheets = buffer[0] === 0x50 && buffer[1] === 0x4b ? readXlsx(buffer) : [{ name: "", rows: readCsv(buffer) }];
+  console.log(`Sheets: ${sheets.map((sheet) => `${sheet.name || "(unnamed)"} with ${sheet.rows.length} rows`).join(", ")}`);
+  // Empty sheets are skipped. The half-hour columns are the same on every sheet.
+  const read = sheets.filter((sheet) => sheet.rows.length > 1).map((sheet) => toTable(sheet.rows, dayOf(sheet.name)));
+  if (read.length === 0) throw new Error("the file has no filled sheet");
+  const slots = read[0].slots;
+  const table = read.flatMap((each) => each.table);
   if (table.length < 100 || slots.length < 20) {
     throw new Error(`the file gave only ${table.length} rows and ${slots.length} time columns. It starts: ${JSON.stringify(buffer.subarray(0, 120).toString("utf8"))}`);
   }
