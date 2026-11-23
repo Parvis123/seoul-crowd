@@ -48,7 +48,7 @@ const en = {
   zoomOut: 'Zoom out',
   zoomReset: 'Show all of Seoul',
   legendPlaces: 'Rings are places. Colour is the crowd level shown above, size is people.',
-  legendStations: 'Dots are stations. Colour is the line, size is riders a day.',
+  legendStations: 'Dots are stations. Colour is the line, size is riders a day. Lines join the stations in order and are not the exact track.',
   placesOnMap: (shown: number, total: number) => `${shown} of ${total} places are on the map so far.`,
   mapHintTouch: 'Use two fingers to move the map',
   mapZoomHintCtrl: 'Use Ctrl + scroll to zoom the map',
@@ -66,7 +66,7 @@ const en = {
     'The city sets each level from a place’s own usual numbers and its size, so a small market can rank above a big district that holds far more people.',
   fullestMore: (count: number) => `And ${count} more.`,
   mostPeople: 'Most people',
-  mostPeopleHint: 'The city’s estimate for each area. Bars compare with the top one.',
+  mostPeopleHint: 'Everyone the city estimates is in the area, including residents at home.',
   fewestPeople: 'Fewest people',
   fewestPeopleHint: 'The emptiest places right now.',
   barLabel: (percent: number) => `${percent}% of the place with the most people`,
@@ -163,6 +163,91 @@ const en = {
   trendSeries: 'A day',
   stationsSource: 'Station figures: Seoul Open Data Plaza, subway boardings and exits by station.',
 
+  // ---- ranking by a chosen measure
+  measureLabel: 'Rank by',
+  measures: { people: 'People', visitors: 'Visitors', usual: 'Against usual' } as Record<string, string>,
+  usualLocked: (have: number, needs: number) =>
+    `Comparing with usual switches on after ${needs} earlier days of readings. ${have} so far.`,
+  mostVisitors: 'Most visitors',
+  mostVisitorsHint:
+    'People who are not regulars there. The city counts someone as a regular if they spent four hours or more there on ten days running last month.',
+  fewestVisitors: 'Fewest visitors',
+  fewestVisitorsHint: 'Mostly the people who live or work there.',
+  busierThanUsual: 'Busier than usual',
+  busierHint: 'Against the same hour on earlier days of the same kind: weekdays, or the weekend.',
+  quieterThanUsual: 'Quieter than usual',
+  quieterHint: 'The places furthest below their own usual for this hour.',
+  visitorsDetail: (visitors: string, percent: number) => `About ${visitors} visitors, ${percent}% of the people there`,
+  usualDetail: (percent: number, now: string, usual: string) =>
+    `${Math.abs(percent)}% ${percent >= 0 ? 'above' : 'below'} usual. About ${now} now, usually ${usual}.`,
+  visitorsBarLabel: (percent: number) => `${percent}% of the place with the most visitors`,
+  usualBarLabel: (percent: number) => `${percent}% of the biggest change in this list`,
+
+  // ---- the place panel
+  ledeAhead: (names: string[], more: number) =>
+    `The city expects crowds later at ${names.join(', ')}${more ? ` and ${more} more` : ''}.`,
+  aheadName: (place: string, time: string) => `${place} (${time})`,
+  forecastTitle: 'The next 12 hours',
+  forecastHint: 'The city’s own forecast. Height is people, colour is the crowd level it expects.',
+  forecastColumn: (hour: string, level: string, range: string) => `${hour}: ${level}, ${range} people`,
+  forecastPeak: (hour: string, level: string) => `Expected to peak around ${hour}: ${level.toLowerCase()}.`,
+  whoTitle: 'Who is there',
+  whoVisitors: (percent: number) => `${percent}% visitors`,
+  whoRegulars: (percent: number) => `${percent}% regulars`,
+  whoHint: 'Regulars spent four hours or more here on ten days running last month. Everyone else counts as a visitor.',
+  ageTitle: 'By age',
+  ages: ['0–9', '10s', '20s', '30s', '40s', '50s', '60s', '70+'],
+  ageColumn: (band: string, percent: number) => `${band}: ${percent}%`,
+  usualNow: (percent: number, days: number) =>
+    percent === 0
+      ? `About its usual for this hour, going by ${days} earlier days.`
+      : `${Math.abs(percent)}% ${percent > 0 ? 'busier' : 'quieter'} than its usual for this hour, going by ${days} earlier days.`,
+  bestTime: (quiet: string, busy: string) => `On days like today it is usually quietest around ${quiet} and busiest around ${busy}.`,
+
+  // ---- pins and links
+  pin: 'Pin to the top of the page',
+  unpin: 'Remove the pin',
+  pinnedTitle: 'Pinned',
+  pinnedHint: 'Your pins are kept in this browser.',
+  copyLink: 'Copy a link to this',
+  linkCopied: 'Link copied',
+  linkCopyFailed: 'Could not copy the link. Copy it from the address bar instead.',
+
+  // ---- near me
+  nearMe: 'Show what is near me',
+  nearTitle: 'Near you',
+  nearHint: 'The closest places and stations, nearest first.',
+  nearClear: 'Clear',
+  nearAway: (distance: string) => `${distance} away`,
+  metres: (value: number) => `${value} m`,
+  kilometres: (value: string) => `${value} km`,
+  nearDenied: 'Location is blocked for this site. Allow it in the browser to use this.',
+  nearFailed: 'Could not find where you are.',
+  nearFar: 'You are outside Seoul, so there is nothing nearby to show.',
+  youAreHere: 'You are here',
+
+  // ---- how this works
+  howTitle: 'How this works',
+  how: [
+    {
+      title: 'Where the crowd numbers come from',
+      body: 'Seoul publishes an estimate of how many people are in 121 busy places, worked out from mobile phone data, with a crowd level and a 12-hour forecast for each. A small script asks for all 121 every 20 minutes.',
+    },
+    {
+      title: 'No server',
+      body: 'The script runs on a schedule on GitHub and saves each reading to a CSV file in the repository. This page reads one summary file straight from there, so there is no database and nothing to keep running.',
+    },
+    {
+      title: 'Where the station numbers come from',
+      body: 'Transit card taps at the gates: a year of monthly totals by hour, and eight weeks of daily totals. They count people entering and leaving. Changing trains inside a station, and how full the trains are, are not in this data.',
+    },
+    {
+      title: 'What “usual” means',
+      body: 'A place is compared with the same hour on earlier days of the same kind, weekdays or the weekend. Collection started on 22 November 2026, so these comparisons sharpen as the weeks add up.',
+    },
+  ],
+  howCode: 'See the code on GitHub',
+
   footer:
     "People counts are the city's estimates from mobile phone data. Data: Seoul Open Data Plaza, Seoul real-time city data.",
 }
@@ -210,7 +295,7 @@ const ko: Strings = {
   zoomOut: '축소',
   zoomReset: '서울 전체 보기',
   legendPlaces: '원은 장소입니다. 색은 위에 표시된 혼잡도, 크기는 인구입니다.',
-  legendStations: '점은 지하철역입니다. 색은 노선, 크기는 하루 승하차 인원입니다.',
+  legendStations: '점은 지하철역입니다. 색은 노선, 크기는 하루 승하차 인원입니다. 선은 역을 순서대로 이은 것으로 실제 선로와 다릅니다.',
   placesOnMap: (shown, total) => `현재 ${total}곳 중 ${shown}곳이 지도에 표시됩니다.`,
   mapHintTouch: '두 손가락으로 지도를 움직이세요',
   mapZoomHintCtrl: 'Ctrl 키를 누른 채 스크롤하면 지도가 확대·축소됩니다',
@@ -228,7 +313,7 @@ const ko: Strings = {
     '서울시는 장소별 평소 인구와 면적을 기준으로 혼잡도를 정합니다. 그래서 작은 시장이 사람이 훨씬 많은 큰 지역보다 위에 올 수 있습니다.',
   fullestMore: (count) => `외 ${count}곳이 더 있습니다.`,
   mostPeople: '사람이 가장 많은 곳',
-  mostPeopleHint: '서울시가 추정한 지역별 인구입니다. 막대는 1위와 비교한 값입니다.',
+  mostPeopleHint: '서울시가 추정한 지역 내 전체 인구입니다. 집에 있는 주민도 포함됩니다.',
   fewestPeople: '사람이 가장 적은 곳',
   fewestPeopleHint: '지금 가장 한산한 곳입니다.',
   barLabel: (percent) => `사람이 가장 많은 곳의 ${percent}%`,
@@ -322,6 +407,87 @@ const ko: Strings = {
   trendHint: '월별 하루 평균 승하차 인원입니다.',
   trendSeries: '하루 평균',
   stationsSource: '역 데이터: 서울 열린데이터광장, 서울시 지하철 호선별 역별 승하차 인원.',
+
+  // ---- ranking by a chosen measure
+  measureLabel: '정렬 기준',
+  measures: { people: '인구', visitors: '방문객', usual: '평소 대비' },
+  usualLocked: (have, needs) => `평소 대비 비교는 이전 ${needs}일치 기록이 쌓이면 켜집니다. 현재 ${have}일.`,
+  mostVisitors: '방문객이 가장 많은 곳',
+  mostVisitorsHint: '그 지역의 상주 인구가 아닌 사람들입니다. 서울시는 지난달 하루 4시간 이상, 10일 이상 연속으로 머문 사람을 상주 인구로 봅니다.',
+  fewestVisitors: '방문객이 가장 적은 곳',
+  fewestVisitorsHint: '대부분 그곳에 살거나 일하는 사람들입니다.',
+  busierThanUsual: '평소보다 붐비는 곳',
+  busierHint: '같은 종류의 이전 날(평일 또는 주말) 같은 시간대와 비교합니다.',
+  quieterThanUsual: '평소보다 한산한 곳',
+  quieterHint: '이 시간대 평소보다 가장 한산한 곳입니다.',
+  visitorsDetail: (visitors, percent) => `방문객 약 ${visitors}명 (전체의 ${percent}%)`,
+  usualDetail: (percent, now, usual) => `평소보다 ${Math.abs(percent)}% ${percent >= 0 ? '많음' : '적음'}. 지금 약 ${now}명, 평소 ${usual}명.`,
+  visitorsBarLabel: (percent) => `방문객이 가장 많은 곳의 ${percent}%`,
+  usualBarLabel: (percent) => `이 목록에서 가장 큰 변화의 ${percent}%`,
+
+  // ---- the place panel
+  ledeAhead: (names, more) => `서울시 예측으로는 ${names.join(', ')}${more ? ` 외 ${more}곳` : ''}이 곧 붐빌 것으로 보입니다.`,
+  aheadName: (place, time) => `${place} (${time})`,
+  forecastTitle: '앞으로 12시간',
+  forecastHint: '서울시의 예측입니다. 높이는 인구, 색은 예상 혼잡도입니다.',
+  forecastColumn: (hour, level, range) => `${hour}: ${level}, ${range}`,
+  forecastPeak: (hour, level) => `${hour}경 가장 붐빌 것으로 예상됩니다 (${level}).`,
+  whoTitle: '지금 있는 사람들',
+  whoVisitors: (percent) => `방문객 ${percent}%`,
+  whoRegulars: (percent) => `상주 인구 ${percent}%`,
+  whoHint: '상주 인구는 지난달 하루 4시간 이상, 10일 이상 연속으로 이곳에 머문 사람입니다. 나머지는 방문객으로 봅니다.',
+  ageTitle: '연령대별',
+  ages: ['0~9세', '10대', '20대', '30대', '40대', '50대', '60대', '70대+'],
+  ageColumn: (band, percent) => `${band}: ${percent}%`,
+  usualNow: (percent, days) =>
+    percent === 0
+      ? `이 시간대 평소와 비슷합니다 (이전 ${days}일 기준).`
+      : `이 시간대 평소보다 ${Math.abs(percent)}% ${percent > 0 ? '붐빕니다' : '한산합니다'} (이전 ${days}일 기준).`,
+  bestTime: (quiet, busy) => `오늘 같은 날에는 보통 ${quiet}경이 가장 한산하고 ${busy}경이 가장 붐빕니다.`,
+
+  // ---- pins and links
+  pin: '페이지 맨 위에 고정',
+  unpin: '고정 해제',
+  pinnedTitle: '고정한 곳',
+  pinnedHint: '고정 목록은 이 브라우저에 저장됩니다.',
+  copyLink: '이 화면의 링크 복사',
+  linkCopied: '링크를 복사했습니다',
+  linkCopyFailed: '링크를 복사하지 못했습니다. 주소창에서 직접 복사해 주세요.',
+
+  // ---- near me
+  nearMe: '내 주변 보기',
+  nearTitle: '내 주변',
+  nearHint: '가까운 장소와 지하철역을 가까운 순으로 보여 줍니다.',
+  nearClear: '지우기',
+  nearAway: (distance) => `${distance} 거리`,
+  metres: (value) => `${value}m`,
+  kilometres: (value) => `${value}km`,
+  nearDenied: '이 사이트의 위치 접근이 차단되어 있습니다. 브라우저에서 허용해 주세요.',
+  nearFailed: '현재 위치를 찾지 못했습니다.',
+  nearFar: '서울 밖에 계셔서 주변에 표시할 곳이 없습니다.',
+  youAreHere: '현재 위치',
+
+  // ---- how this works
+  howTitle: '이 사이트는 이렇게 만들어집니다',
+  how: [
+    {
+      title: '혼잡도 숫자의 출처',
+      body: '서울시는 주요 121곳에 지금 몇 명이 있는지를 통신 데이터로 추정해 혼잡도 단계, 12시간 예측과 함께 공개합니다. 작은 스크립트가 20분마다 121곳 전부를 조회합니다.',
+    },
+    {
+      title: '서버가 없습니다',
+      body: '스크립트는 GitHub에서 정해진 시간에 실행되어 기록을 저장소의 CSV 파일에 쌓습니다. 이 페이지는 거기서 요약 파일 하나를 바로 읽습니다. 데이터베이스도, 계속 켜 둘 서버도 없습니다.',
+    },
+    {
+      title: '지하철역 숫자의 출처',
+      body: '개찰구에서 찍힌 교통카드 기록입니다. 1년치 월별 시간대 합계와 8주치 일별 합계를 씁니다. 타고 내린 사람만 집계하며, 역 안에서의 환승과 열차 안의 혼잡은 이 데이터에 없습니다.',
+    },
+    {
+      title: '‘평소’의 뜻',
+      body: '같은 종류의 이전 날(평일 또는 주말) 같은 시간대와 비교합니다. 수집은 2026년 11월 22일에 시작했기 때문에 기록이 쌓일수록 비교가 정확해집니다.',
+    },
+  ],
+  howCode: 'GitHub에서 코드 보기',
 
   footer: '인구는 서울시가 통신 데이터를 바탕으로 추정한 값입니다. 출처: 서울 열린데이터광장, 서울시 실시간 도시데이터.',
 }

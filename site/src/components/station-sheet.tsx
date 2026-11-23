@@ -4,6 +4,7 @@ import { Area, AreaChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'r
 import { Columns } from '@/components/columns'
 import { LevelBadge } from '@/components/level-badge'
 import { LineBadge } from '@/components/line-badge'
+import { PanelActions } from '@/components/panel-actions'
 import { Button } from '@/components/ui/button'
 import {
   type ChartConfig,
@@ -73,7 +74,7 @@ export function StationSheet({
         {station && other && figures && (
           <>
             <SheetHeader>
-              <SheetTitle className="pr-8 font-display text-2xl">{station.name(lang)}</SheetTitle>
+              <SheetTitle className="pr-28 font-display text-2xl">{station.name(lang)}</SheetTitle>
               <SheetDescription asChild>
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   {station.lines.map((line) => (
@@ -84,6 +85,7 @@ export function StationSheet({
               <p className="text-xs text-muted-foreground/70" lang={other.lang}>
                 {other.text}
               </p>
+              <PanelActions id={station.id} />
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1 [&>[data-slot=scroll-area-viewport]>div]:!block">
               <div className="space-y-6 px-4 pb-6">

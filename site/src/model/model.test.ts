@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { Network } from '@/model/network'
+import type { LatLng } from '@/model/geo'
+import { Measure } from '@/model/measure'
 import { CrowdLevel, PlaceDirectory, type RawPlaceFile } from '@/model/place'
+import { type RawStop, buildRoutes } from '@/model/route'
 import { Ridership } from '@/model/ridership'
 import { type RawStationFile, StationDirectory } from '@/model/station'
 import { fold, initials, isInitials } from '@/model/text'
@@ -230,5 +233,98 @@ describe('Network', () => {
   it('puts an exact name before a longer one, and searches places too', () => {
     expect(network.search('sinchon').stations.map((s) => s.key)).toEqual(['신촌', '신촌@gj'])
     expect(network.search('seoul').places.map((p) => p.name('en'))).toEqual(['Seoul station', 'Seoul Forest'])
+  })
+})
+
+// ---------- measures, the forecast and the usual ----------
+
+describe('ranking by a chosen measure', () => {
+  const reading = (level: string, people: number, more: object = {}) => ({ time: '2026-11-23 18:00', level, min: people - 500, max: people + 500, ...more })
+  const grid = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => null))
+  const place = (code: string, latest: object, usual: { people: number; days: number } | null = null) =>
+    ({ name: code, label: code, code, readings: 1, first_reading: '2026-11-22 10:00', latest, usual, grid }) as RawPlaceFile['places'][number]
+  const forecast = [
+    { time: '2026-11-23 19:00', level: '약간 붐빔', min: 9000, max: 11000 },
+    { time: '2026-11-23 20:00', level: '붐빔', min: 14000, max: 16000 },
+    { time: '2026-11-23 21:00', level: '붐빔', min: 12000, max: 14000 },
+  ]
+  const directory = PlaceDirectory.fromFile({
+    generated_at: '',
+    places: [
+      // A big district full of residents, a smaller one full of visitors, and one with no extras at all.
+      place('HOME', reading('여유', 60000, { visitors: 10 }), { people: 60000, days: 6 }),
+      place('NIGHT', reading('보통', 8000, { visitors: 90, forecast }), { people: 4000, days: 6 }),
+      place('NEW', reading('여유', 20000), { people: 100, days: 1 }),
+    ],
+  })
+  const names = (list: { code: string }[]) => list.map((each) => each.code)
+
+  it('ranks the same places differently by people and by visitors', () => {
+    expect(names(Measure.people.rank(directory.places))).toEqual(['HOME', 'NEW', 'NIGHT'])
+    expect(names(Measure.visitors.rank(directory.places))).toEqual(['NIGHT', 'HOME']) // 7,200 visitors against 6,000
+  })
+
+  it('leaves out places that lack the measure, and says when too few have it', () => {
+    expect(Measure.visitors.covers(directory.places)).toBe(true) // two of three
+    expect(Measure.usual.of(directory.get('NEW')!)).toBeNull() // one earlier day is not a usual
+    expect(directory.usualDays).toBe(6)
+  })
+
+  it('compares a place with its own usual for the hour', () => {
+    expect(directory.get('NIGHT')!.versusUsual).toBe(1) // twice its usual
+    expect(directory.get('HOME')!.versusUsual).toBe(0)
+    expect(names(Measure.usual.rank(directory.places))).toEqual(['NIGHT', 'HOME'])
+  })
+
+  it('reads the forecast: the peak, and the first crowded hour', () => {
+    const night = directory.get('NIGHT')!
+    expect(night.peakAhead!.hour).toBe(20)
+    expect(night.crowdedAhead!.hour).toBe(20)
+    expect(directory.crowdedAhead.map(({ place: each }) => each.code)).toEqual(['NIGHT'])
+    expect(directory.get('HOME')!.forecast).toEqual([])
+  })
+})
+
+// ---------- drawing the lines ----------
+
+describe('the order of stops along a line', () => {
+  const at = (n: number): LatLng => ({ lat: 37.5 + n / 1000, lng: 127 })
+  const where: Record<string, LatLng> = Object.fromEntries('abcdefghij'.split('').map((name, n) => [name, at(n)]))
+  const routes = (stops: RawStop[]) => buildRoutes(stops, (_line, name) => where[name] ?? null)
+  const order = (path: LatLng[]) => path.map((point) => Object.keys(where).find((name) => where[name] === point)).join('')
+
+  it('sorts by stop number, whatever order the list is in', () => {
+    const [line3] = routes([['03호선', '312', 'c'], ['03호선', '310', 'a'], ['03호선', '311', 'b']])
+    expect(line3.line.id).toBe('3')
+    expect(line3.paths.map(order)).toEqual(['abc'])
+  })
+
+  it('closes Line 2 into a circle and hangs its spurs off the right stop', () => {
+    const [line2] = routes([['02호선', '201', 'a'], ['02호선', '202', 'b'], ['02호선', '203', 'c'], ['02호선', '202-1', 'd'], ['02호선', '202-2', 'e']])
+    expect(line2.paths.map(order)).toEqual(['abca', 'bde'])
+  })
+
+  it('joins a branch numbered with a P to the stop before it', () => {
+    const [line5] = routes([['05호선', '547', 'a'], ['05호선', '548', 'b'], ['05호선', '549', 'c'], ['05호선', 'P549', 'd'], ['05호선', 'P550', 'e']])
+    expect(line5.paths.map(order)).toEqual(['abc', 'bde'])
+  })
+
+  it('passes Eungam twice on the Line 6 loop', () => {
+    const [line6] = routes([['06호선', '610', 'a'], ['06호선', '611', 'b'], ['06호선', '615', 'c'], ['06호선', '616', 'd']])
+    expect(line6.paths.map(order)).toEqual(['abcad'])
+  })
+
+  it('skips lines the site does not show, and stops it cannot place', () => {
+    expect(routes([['신분당선', 'D10', 'a'], ['신분당선', 'D11', 'b']])).toEqual([])
+    const [line3] = routes([['03호선', '310', 'a'], ['03호선', '311', 'nowhere'], ['03호선', '312', 'c']])
+    expect(line3.paths.map(order)).toEqual(['ac'])
+  })
+})
+
+describe('what is near a point', () => {
+  it('lists the closest places and stations, nearest first', () => {
+    const near = network.near({ lat: 37.5571, lng: 126.9245 }, 2) // beside Hongik University
+    expect(near[0].item.name('en')).toMatch(/Hongik/)
+    expect(near.every((each, i) => i === 0 || each.km >= near[i - 1].km)).toBe(true)
   })
 })

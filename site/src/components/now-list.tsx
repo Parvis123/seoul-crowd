@@ -10,7 +10,9 @@ export function NowList({
   title,
   description,
   places,
+  detail,
   share,
+  barLabel,
   footnote,
   wide = false,
   className = '',
@@ -19,8 +21,12 @@ export function NowList({
   title: string
   description: string
   places: Place[]
-  /** A place's people as a percentage of the place with the most. Give it to draw a bar on each row. */
+  /** The line under each name. Left out, it is the city's estimated range of people. */
+  detail?: (place: Place) => string
+  /** A percentage for each row's bar: how the place compares with the top of the list. Left out, there is no bar. */
   share?: (place: Place) => number
+  /** What a bar of that percentage means, for screen readers. */
+  barLabel?: (percent: number) => string
   footnote?: string
   /** Lay the rows out in two columns where there is room, for a card that spans the page. */
   wide?: boolean
@@ -51,13 +57,13 @@ export function NowList({
                     <LevelBadge level={place.level} />
                   </span>
                   <span className="mt-0.5 block text-sm text-muted-foreground tabular-nums">
-                    {s.rangePeople(formatRange(lang, place.range))}
+                    {detail ? detail(place) : s.rangePeople(formatRange(lang, place.range))}
                   </span>
                   {share && (
                     <Progress
                       value={share(place)}
                       className={`mt-2 h-1.5 ${LEVEL_BAR[place.level.rank]}`}
-                      aria-label={s.barLabel(share(place))}
+                      aria-label={(barLabel ?? s.barLabel)(share(place))}
                     />
                   )}
                 </span>

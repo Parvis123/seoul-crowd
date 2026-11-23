@@ -15,6 +15,7 @@ export function Headline({ places }: { places: PlaceDirectory }) {
   // Name the crowded places, or failing that the ones closest to it.
   const [level, named] = crowded.length ? [CrowdLevel.crowded, crowded] : [CrowdLevel.slightlyCrowded, nearly]
   const most = places.mostPeople
+  const ahead = places.crowdedAhead
 
   return (
     <section>
@@ -30,6 +31,11 @@ export function Headline({ places }: { places: PlaceDirectory }) {
             Math.max(0, named.length - NAMED),
           )} `}
         {most && s.statusTop(most.name(lang), formatPeople(lang, most.people))}
+        {ahead.length > 0 &&
+          ` ${s.ledeAhead(
+            ahead.slice(0, 2).map(({ place, when }) => s.aheadName(place.name(lang), s.hour(when.hour))),
+            Math.max(0, ahead.length - 2),
+          )}`}
       </p>
       <LevelStrip places={places} className="mt-6" />
     </section>

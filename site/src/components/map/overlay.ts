@@ -1,21 +1,25 @@
-import type { Feature as GeoFeature, FeatureCollection, Point } from 'geojson'
+import type { Feature as GeoFeature, FeatureCollection, MultiLineString, Point } from 'geojson'
 import type { ExpressionSpecification, GeoJSONSource, Map as MapLibre } from 'maplibre-gl'
 
 import type { Theme } from '@/components/map/basemap'
 import type { Lang } from '@/lib/i18n'
+import type { LatLng } from '@/model/geo'
 import type { Network } from '@/model/network'
 import type { Place } from '@/model/place'
+import type { Route } from '@/model/route'
 import type { Station } from '@/model/station'
 
 // This site's own layers, drawn over the background map: stations as dots in
 // their line colour, places as glowing rings in their crowd-level colour.
 
 export type Item = Place | Station
-export const idOf = (item: Item) => (item.kind === 'place' ? `place:${item.code}` : `station:${item.key}`)
+export const idOf = (item: Item) => item.id
 
 // The names get sources of their own. They are drawn with fonts fetched from the map service,
 // and if those fail to arrive the library gives up on the whole source, which must not take the marks with it.
 export const SOURCE = {
+  routes: 'crowd-routes',
+  here: 'crowd-here',
   stations: 'crowd-stations',
   places: 'crowd-places',
   selected: 'crowd-selected',
@@ -23,6 +27,9 @@ export const SOURCE = {
   placeNames: 'crowd-place-names',
 } as const
 export const LAYER = {
+  routes: 'crowd-routes',
+  hereHalo: 'crowd-here-halo',
+  here: 'crowd-here',
   glow: 'crowd-place-glow',
   stations: 'crowd-station-dots',
   rings: 'crowd-place-rings',
@@ -32,7 +39,7 @@ export const LAYER = {
   placeNames: 'crowd-place-names',
 } as const
 export const PLACE_LAYERS = [LAYER.glow, LAYER.rings, LAYER.topPlaceNames, LAYER.placeNames]
-export const STATION_LAYERS = [LAYER.stations, LAYER.stationNames]
+export const STATION_LAYERS = [LAYER.routes, LAYER.stations, LAYER.stationNames]
 
 // The crowd-level colours as the map library needs them. It cannot read the oklch()
 // values in index.css, so these are the same four colours (--level-0 to --level-3) as hex.
@@ -125,6 +132,24 @@ export function placeFeatures(network: Network, lang: Lang, theme: Theme) {
 
 export const emptyCollection = collection([])
 
+/** Each line as one feature: every path it runs, in its own colour. */
+export function routeFeatures(routes: readonly Route[]): FeatureCollection<MultiLineString> {
+  return {
+    type: 'FeatureCollection',
+    features: routes.map((route) => ({
+      type: 'Feature',
+      geometry: { type: 'MultiLineString', coordinates: route.paths.map((path) => path.map((point) => [point.lng, point.lat])) },
+      properties: { color: route.line.color },
+    })),
+  }
+}
+
+/** The reader's own position, as a single point. */
+export function hereFeature(here: LatLng | null): Points {
+  if (!here) return emptyCollection
+  return collection([{ type: 'Feature', geometry: { type: 'Point', coordinates: [here.lng, here.lat] }, properties: { id: 'here', name: '', color: '', order: 0, r: 0 } }])
+}
+
 /** Adds this site's sources and layers to a freshly loaded style. Safe to call again after the style changes. */
 export function addOverlay(map: MapLibre, theme: Theme) {
   const dark = theme === 'dark'
@@ -143,6 +168,18 @@ export function addOverlay(map: MapLibre, theme: Theme) {
     'text-padding': 4,
   }
 
+  // The lines sit under everything else, thin and a little see-through, so the dots stay the subject.
+  map.addLayer({
+    id: LAYER.routes,
+    type: 'line',
+    source: SOURCE.routes,
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': ['get', 'color'],
+      'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 12, 2, 15, 3.5],
+      'line-opacity': dark ? 0.75 : 0.7,
+    },
+  })
   map.addLayer({
     id: LAYER.glow,
     type: 'circle',
@@ -178,6 +215,20 @@ export function addOverlay(map: MapLibre, theme: Theme) {
     source: SOURCE.selected,
     paint: { 'circle-radius': radius(1, 5), 'circle-opacity': 0, 'circle-stroke-color': ink, 'circle-stroke-width': 2 },
   })
+  // Where the reader is, when they have asked: a blue dot over the marks.
+  map.addLayer({
+    id: LAYER.hereHalo,
+    type: 'circle',
+    source: SOURCE.here,
+    paint: { 'circle-radius': 16, 'circle-color': '#3b82f6', 'circle-opacity': 0.22 },
+  })
+  map.addLayer({
+    id: LAYER.here,
+    type: 'circle',
+    source: SOURCE.here,
+    paint: { 'circle-radius': 6, 'circle-color': '#3b82f6', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2.5 },
+  })
+
   // Names are drawn with the background map's fonts. Without them (the plain fallback) the marks stand alone.
   if (!map.getStyle().glyphs) return
   map.addLayer({
@@ -208,6 +259,6 @@ export function addOverlay(map: MapLibre, theme: Theme) {
   })
 }
 
-export function setData(map: MapLibre, source: string, data: Points) {
+export function setData(map: MapLibre, source: string, data: Points | FeatureCollection<MultiLineString>) {
   ;(map.getSource(source) as GeoJSONSource | undefined)?.setData(data)
 }

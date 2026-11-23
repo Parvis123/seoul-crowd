@@ -1,3 +1,4 @@
+import { setAddress, useAddress } from '@/lib/address'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
@@ -39,8 +40,13 @@ export function Stations({
   onSelect: (station: Station) => void
 }) {
   const { lang, s } = useLanguage()
-  const [view, setView] = useState<'stations' | 'lines'>('stations')
-  const [line, setLine] = useState<Line | null>(null)
+  // Which view and which line are part of the address, so a ranking can be linked to.
+  const address = useAddress()
+  const view: 'stations' | 'lines' = address.get('view') === 'lines' ? 'lines' : 'stations'
+  const asked = address.get('line')
+  const line = Line.all.find((each) => each.id === asked) ?? null
+  const setView = (next: 'stations' | 'lines') => setAddress({ view: next === 'lines' ? 'lines' : null })
+  const setLine = (next: Line | null) => setAddress({ line: next?.id ?? null, view: null })
   const [hour, setHour] = useState<number | null>(null)
   const [sort, setSort] = useState<{ key: SortKey; down: boolean }>({ key: 'total', down: true })
   const [shown, setShown] = useState(PAGE)

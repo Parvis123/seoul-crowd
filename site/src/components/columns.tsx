@@ -5,6 +5,8 @@ export type Column = {
   value: number
   axis: string // the label under the column, or '' for none
   text: string // what the column says on hover, on focus and to a screen reader
+  /** A background class for this column. Left out, the tallest column is picked out and the rest are grey. */
+  tone?: string
 }
 
 /**
@@ -28,7 +30,7 @@ export function Columns({ items, label, peakValue }: { items: Column[]; label: s
                 >
                   <span
                     className={`relative w-full max-w-6 rounded-t-[4px] transition-opacity group-hover:opacity-80 group-focus-visible:ring-2 group-focus-visible:ring-ring ${
-                      item === peak ? 'bg-heat' : 'bg-muted-foreground/30'
+                      item.tone ?? (item === peak ? 'bg-heat' : 'bg-muted-foreground/30')
                     }`}
                     style={{ height: `${Math.max(1.5, (item.value / max) * 100)}%` }}
                   >

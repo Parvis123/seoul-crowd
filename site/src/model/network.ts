@@ -1,4 +1,4 @@
-import type { LatLng } from '@/model/geo'
+import { type LatLng, kilometresBetween } from '@/model/geo'
 import type { Place, PlaceDirectory } from '@/model/place'
 import type { Station, StationDirectory } from '@/model/station'
 import { baseName, fold, isInitials } from '@/model/text'
@@ -52,6 +52,25 @@ export class Network {
   /** Where a place is. For now only places named after a station have a position. */
   locationOf(place: Place): LatLng | null {
     return this.stationsFor(place).find((station) => station.location)?.location ?? null
+  }
+
+  /**
+   * What is closest to a point: the nearest few places and the nearest few
+   * stations in one list, nearest first, each with its distance in kilometres.
+   */
+  near(point: LatLng, limit = 4): { item: Place | Station; km: number }[] {
+    const nearest = <T extends Place | Station>(items: readonly T[], where: (item: T) => LatLng | null) =>
+      items
+        .flatMap((item) => {
+          const location = where(item)
+          return location ? [{ item: item as Place | Station, km: kilometresBetween(point, location) }] : []
+        })
+        .sort((a, b) => a.km - b.km)
+        .slice(0, limit)
+    return [
+      ...nearest(this.places.places, (place) => this.locationOf(place)),
+      ...nearest(this.stations?.stations ?? [], (station) => station.location),
+    ].sort((a, b) => a.km - b.km)
   }
 
   /**

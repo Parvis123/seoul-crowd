@@ -1,12 +1,15 @@
 import { RefreshCw, TriangleAlert } from 'lucide-react'
-import { Suspense, lazy, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { useNetwork, usePlaces, useStations } from '@/api/queries'
 import { AllPlaces } from '@/components/all-places'
 import { Headline } from '@/components/headline'
+import { HowItWorks } from '@/components/how-it-works'
+import { ItemList } from '@/components/item-list'
 import { LanguageToggle } from '@/components/language-toggle'
 import { NowList } from '@/components/now-list'
+import { RankedLists } from '@/components/ranked-lists'
 import { SearchBox } from '@/components/search-box'
 import { Stations } from '@/components/stations'
 import { ThemeMenu } from '@/components/theme-menu'
@@ -15,7 +18,10 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Toaster } from '@/components/ui/sonner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useLanguage } from '@/lib/i18n'
+import { openedPanel, setAddress, useAddress } from '@/lib/address'
+import { formatNumber, useLanguage } from '@/lib/i18n'
+import { usePins } from '@/lib/pins'
+import { type LatLng, kilometresBetween } from '@/model/geo'
 import type { Place } from '@/model/place'
 import type { Station } from '@/model/station'
 
@@ -28,15 +34,21 @@ const StationSheet = lazy(() => import('@/components/station-sheet').then((modul
 /** How many places the "fullest for their size" list shows before it says "and more". */
 const FULLEST = 6
 
-/** What the side panel is showing. Only one thing is open at a time. */
-type Selection = { kind: 'place'; code: string } | { kind: 'station'; key: string } | null
+const TABS = ['now', 'all', 'stations'] as const
+const CITY_HALL: LatLng = { lat: 37.5663, lng: 126.9779 }
+/** Further than this from City Hall, there is nothing on the map to call nearby. */
+const NEARBY_KM = 45
 
 function App() {
-  const { s } = useLanguage()
+  const { lang, s } = useLanguage()
   const places = usePlaces()
   const stations = useStations()
   const network = useNetwork()
-  const [selection, setSelection] = useState<Selection>(null)
+  const pins = usePins()
+  // What is open lives in the address (?place=, ?station=, ?tab=), so any view can be linked to.
+  const address = useAddress()
+  const tab = TABS.find((each) => each === address.get('tab')) ?? 'now'
+  const [here, setHere] = useState<LatLng | null>(null)
 
   const refresh = async () => {
     const result = await places.refetch()
@@ -44,14 +56,47 @@ function App() {
     else toast.error(s.updateFailed)
   }
 
+  const panelOpen = address.has('place') || address.has('station')
+  // Opening a panel adds a step to the browser's history, so Back closes it. Moving from one panel to another does not.
   const select = (item: Place | Station) =>
-    setSelection(item.kind === 'place' ? { kind: 'place', code: item.code } : { kind: 'station', key: item.key })
-  const close = () => setSelection(null)
+    setAddress(item.kind === 'place' ? { place: item.code, station: null } : { station: item.key, place: null }, {
+      push: !panelOpen,
+      panel: true,
+    })
+  const close = () => (openedPanel() ? window.history.back() : setAddress({ place: null, station: null }))
 
   // Looked up again on every render, so an open panel follows fresh readings.
-  const openPlace = selection?.kind === 'place' ? (network?.places.get(selection.code) ?? null) : null
-  const openStation = selection?.kind === 'station' ? (network?.stations?.get(selection.key) ?? null) : null
-  const byPeople = network?.places.byPeople ?? []
+  const openPlace = network?.places.get(address.get('place') ?? '') ?? null
+  const openStation = network?.stations?.get(address.get('station') ?? '') ?? null
+
+  // The browser tab names what is open, which is also what a bookmark or shared link is called.
+  const openName = (openPlace ?? openStation)?.name(lang)
+  useEffect(() => {
+    document.title = openName ? `${openName} · ${s.title}` : s.title
+  }, [openName, s])
+
+  const locate = () => {
+    if (!('geolocation' in navigator)) return void toast.error(s.nearFailed)
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const found = { lat: coords.latitude, lng: coords.longitude }
+        if (kilometresBetween(found, CITY_HALL) > NEARBY_KM) toast.info(s.nearFar)
+        else setHere(found)
+      },
+      (error) => toast.error(error.code === error.PERMISSION_DENIED ? s.nearDenied : s.nearFailed),
+      { timeout: 10_000, maximumAge: 60_000 },
+    )
+  }
+  const nearby = here && network ? network.near(here) : null
+  const distance = (km: number) =>
+    s.nearAway(km < 1 ? s.metres(Math.round((km * 1000) / 10) * 10) : s.kilometres(formatNumber(lang, Math.round(km * 10) / 10)))
+
+  const pinned = network
+    ? pins.ids.flatMap((id) => {
+        const item = id.startsWith('place:') ? network.places.get(id.slice(6)) : network.stations?.get(id.slice(8))
+        return item ? [item] : []
+      })
+    : []
   const fullest = network?.places.aboveRelaxed ?? []
 
   return (
@@ -105,11 +150,11 @@ function App() {
           <>
             <section className="mt-8">
               <Suspense fallback={<Skeleton className="h-[24rem] rounded-xl sm:h-[32rem] lg:h-[36rem]" />}>
-                <CityMap network={network} selected={openPlace ?? openStation} onSelect={select} />
+                <CityMap network={network} selected={openPlace ?? openStation} here={here} onSelect={select} onLocate={locate} />
               </Suspense>
             </section>
 
-            <Tabs defaultValue="now" className="mt-8">
+            <Tabs value={tab} onValueChange={(next) => setAddress({ tab: next === 'now' ? null : next })} className="mt-8">
               <TabsList>
                 <TabsTrigger value="now">{s.tabNow}</TabsTrigger>
                 <TabsTrigger value="all">{s.tabAll(network.places.places.length)}</TabsTrigger>
@@ -117,6 +162,21 @@ function App() {
               </TabsList>
               <TabsContent value="now" className="mt-4">
                 <div className="grid gap-4 md:grid-cols-2">
+                  {nearby && (
+                    <ItemList
+                      title={s.nearTitle}
+                      description={s.nearHint}
+                      items={nearby.map((each) => each.item)}
+                      note={(item) => distance(nearby.find((each) => each.item === item)?.km ?? 0)}
+                      action={
+                        <Button variant="ghost" size="sm" onClick={() => setHere(null)}>
+                          {s.nearClear}
+                        </Button>
+                      }
+                      onSelect={select}
+                    />
+                  )}
+                  {pinned.length > 0 && <ItemList title={s.pinnedTitle} description={s.pinnedHint} items={pinned} onSelect={select} />}
                   {fullest.length > 0 && (
                     <NowList
                       className="md:col-span-2"
@@ -128,19 +188,7 @@ function App() {
                       onSelect={select}
                     />
                   )}
-                  <NowList
-                    title={s.mostPeople}
-                    description={s.mostPeopleHint}
-                    places={byPeople.slice(0, 5)}
-                    share={(place) => network.places.share(place)}
-                    onSelect={select}
-                  />
-                  <NowList
-                    title={s.fewestPeople}
-                    description={s.fewestPeopleHint}
-                    places={byPeople.slice(-5).reverse()}
-                    onSelect={select}
-                  />
+                  <RankedLists places={network.places} onSelect={select} />
                 </div>
               </TabsContent>
               <TabsContent value="all" className="mt-4">
@@ -159,7 +207,9 @@ function App() {
               </TabsContent>
             </Tabs>
 
-            <p className="mt-8 text-sm text-muted-foreground">
+            <HowItWorks />
+
+            <p className="mt-10 text-sm text-muted-foreground">
               {s.footer} {s.stationsSource} {s.mapSource}
             </p>
           </>

@@ -1,8 +1,12 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 
+import { setAddress } from '@/lib/address'
 import { type Lang, LanguageContext, STRINGS } from '@/lib/i18n'
 
 function initial(): Lang {
+  // A link can ask for a language: ?lang=ko
+  const asked = new URLSearchParams(window.location.search).get('lang')
+  if (asked === 'en' || asked === 'ko') return asked
   try {
     const stored = localStorage.getItem('lang')
     if (stored === 'en' || stored === 'ko') return stored
@@ -17,7 +21,6 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = lang
-    document.title = STRINGS[lang].title
   }, [lang])
 
   const value = useMemo(
@@ -30,6 +33,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         } catch {
           // The choice still applies for this visit.
         }
+        // Once someone picks a language, links they copy carry it.
+        setAddress({ lang: next })
         setLangState(next)
       },
     }),

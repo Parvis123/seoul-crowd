@@ -1,3 +1,4 @@
+import { type RawStop, type Route, buildRoutes } from '@/model/route'
 import type { Lang } from '@/lib/i18n'
 import { type LatLng, centreOf, kilometresBetween } from '@/model/geo'
 import { Line, type LineId } from '@/model/line'
@@ -25,6 +26,8 @@ export type RawStationFile = {
   stations: RawStation[]
   /** { station name: [[railway, lat, lng], ...] } */
   coordinates?: Record<string, [string, number, number][]>
+  /** Every stop as [line, stop number, station name]. The numbers give the order along a line. */
+  stops?: RawStop[]
 }
 
 // ---------- quirks of the city's data ----------
@@ -116,6 +119,11 @@ export class Station {
     return { text: this.names[other], lang: other }
   }
 
+  /** One id across places and stations, used by the map, pins and links. */
+  get id(): string {
+    return `station:${this.key}`
+  }
+
   serves(line: Line): boolean {
     return this.lines.includes(line)
   }
@@ -172,9 +180,18 @@ export class StationDirectory {
   readonly months: readonly string[]
   /** The days the weekday averages come from. */
   readonly days: { from: string; to: string; count: number } | null
+  /** Each line as a path through its stations, for the map. Empty if the file has no stop order. */
+  readonly routes: readonly Route[]
   private readonly byKey: Map<string, Station>
 
   private constructor(stations: readonly Station[], file: RawStationFile) {
+    const coordinates = file.coordinates ?? {}
+    this.routes = buildRoutes(file.stops ?? [], (line, name) => {
+      const key = SHARED_NAMES.has(name) && line.id === 'gj' ? `${name}@gj` : name
+      const platforms = StationDirectory.platforms(key, SAME_STATION[name] ?? name, coordinates)
+      // The line's own platform if the list has it, otherwise wherever the station is.
+      return platforms.find((platform) => platform.line === line) ?? platforms[0] ?? null
+    })
     this.stations = stations
     this.month = file.month
     this.months = file.months

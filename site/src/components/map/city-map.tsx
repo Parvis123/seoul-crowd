@@ -2,7 +2,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 
 import { useQuery } from '@tanstack/react-query'
 import type { Point } from 'geojson'
-import { Minus, Plus, Scan, TriangleAlert } from 'lucide-react'
+import { LocateFixed, Minus, Plus, Scan, TriangleAlert } from 'lucide-react'
 import { Map as MapLibre, type MapMouseEvent, type StyleSpecification, setWorkerUrl } from 'maplibre-gl'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { useTheme } from 'next-themes'
@@ -19,6 +19,8 @@ import {
   STATION_LAYERS,
   addOverlay,
   emptyCollection,
+  hereFeature,
+  routeFeatures,
   idOf,
   placeFeatures,
   setData,
@@ -28,6 +30,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatNumber, formatRange, useLanguage } from '@/lib/i18n'
+import type { LatLng } from '@/model/geo'
 import type { Network } from '@/model/network'
 
 // The map library does its heavy work in a background worker, and has to be told where the bundler put it.
@@ -82,11 +85,16 @@ function canDraw(): boolean {
 export function CityMap({
   network,
   selected,
+  here,
   onSelect,
+  onLocate,
 }: {
   network: Network
   selected: Item | null
+  /** Where the reader is, once they have asked to see what is near them. */
+  here: LatLng | null
   onSelect: (item: Item) => void
+  onLocate: () => void
 }) {
   const { lang, s } = useLanguage()
   const theme: Theme = useTheme().resolvedTheme === 'light' ? 'light' : 'dark'
@@ -116,6 +124,7 @@ export function CityMap({
 
   const stationData = useMemo(() => stationFeatures(network.stations?.stations ?? [], lang), [network.stations, lang])
   const placeData = useMemo(() => placeFeatures(network, lang, theme), [network, lang, theme])
+  const routeData = useMemo(() => routeFeatures(network.stations?.routes ?? []), [network.stations])
 
   // ---------- the map itself ----------
 
@@ -233,7 +242,20 @@ export function CityMap({
     setData(map, SOURCE.stationNames, stationData)
     setData(map, SOURCE.places, placeData)
     setData(map, SOURCE.placeNames, placeData)
-  }, [styleLoads, stationData, placeData])
+    setData(map, SOURCE.routes, routeData)
+  }, [styleLoads, stationData, placeData, routeData])
+
+  // The reader's own position: mark it and move there.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || styleLoads === 0) return
+    setData(map, SOURCE.here, hereFeature(here))
+  }, [styleLoads, here])
+  useEffect(() => {
+    if (!here || !mapRef.current) return
+    followsFrame.current = false
+    mapRef.current.easeTo({ center: [here.lng, here.lat], zoom: Math.max(mapRef.current.getZoom(), 13.5), duration: 700 })
+  }, [here])
 
   useEffect(() => {
     const map = mapRef.current
@@ -321,6 +343,9 @@ export function CityMap({
           </Button>
           <Button variant="outline" size="icon-sm" className="bg-card" onClick={() => zoom(-1)} aria-label={s.zoomOut}>
             <Minus />
+          </Button>
+          <Button variant="outline" size="icon-sm" className="bg-card" onClick={onLocate} aria-label={s.nearMe} title={s.nearMe}>
+            <LocateFixed className={here ? 'text-blue-500' : ''} />
           </Button>
           <Button
             variant="outline"

@@ -11,13 +11,25 @@ type RawReading = {
   max: number
 }
 
+/** What the city adds about the moment of a reading. Older files, and some places, lack these. */
+type RawNow = {
+  /** The share of people there who are not regulars, as a percentage. */
+  visitors?: number | null
+  /** The share in each age band, as percentages: under 10, 10s, 20s ... 70 and over. */
+  ages?: number[] | null
+  /** The city's forecast for the coming hours. */
+  forecast?: RawReading[]
+}
+
 type RawPlace = {
   name: string // the city's official Korean name
   label: string // English name
   code: string
   readings: number
   first_reading: string
-  latest: RawReading | null
+  latest: (RawReading & RawNow) | null
+  /** The usual number of people at this hour on earlier days of the same kind, and how many days that rests on. */
+  usual?: { people: number; days: number } | null
   grid: (number | null)[][] // [weekday, Monday first][hour] = average people
 }
 
@@ -53,6 +65,31 @@ export class CrowdLevel {
 
 }
 
+// ---------- one hour of the forecast ----------
+
+/** What the city expects at a place at one coming hour. */
+export class Outlook {
+  /** Seoul time, "YYYY-MM-DD HH:MM". */
+  readonly time: string
+  readonly level: CrowdLevel
+  readonly range: { min: number; max: number }
+
+  constructor(raw: RawReading) {
+    this.time = raw.time
+    this.level = CrowdLevel.from(raw.level)
+    this.range = { min: raw.min, max: raw.max }
+  }
+
+  get people(): number {
+    return (this.range.min + this.range.max) / 2
+  }
+
+  /** The hour of the day, 0 to 23. */
+  get hour(): number {
+    return Number(this.time.slice(11, 13))
+  }
+}
+
 // ---------- a place ----------
 
 /** The city's English names, with their spacing and capitals put right. */
@@ -77,11 +114,21 @@ export class Place {
   readonly grid: readonly (readonly (number | null)[])[]
   /** The Korean name as the city writes it, which is what links a place to its stations. */
   readonly officialName: string
+  /** The city's forecast for the next hours, soonest first. Empty when it gave none. */
+  readonly forecast: readonly Outlook[]
+  /** The share of people there who are not regulars, 0 to 1, or null when unknown. */
+  readonly visitorShare: number | null
+  /** The share of people in each age band, 0 to 1: under 10, 10s, 20s ... 70 and over. */
+  readonly ages: readonly number[] | null
+  /** The usual number of people at this hour, and how many earlier days that average rests on. */
+  readonly usual: { people: number; days: number } | null
+  /** An average over fewer earlier days than this says too little to call anything unusual. */
+  static readonly USUAL_NEEDS_DAYS = 3
   private readonly names: Record<Lang, string>
   private readonly terms: string[]
   private readonly koreanInitials: string
 
-  constructor(raw: RawPlace & { latest: RawReading }) {
+  constructor(raw: RawPlace & { latest: RawReading & RawNow }) {
     this.code = raw.code
     this.officialName = raw.name
     this.names = { ko: raw.name, en: tidy(raw.label) }
@@ -90,8 +137,17 @@ export class Place {
     this.range = { min: raw.latest.min, max: raw.latest.max }
     this.time = raw.latest.time
     this.grid = raw.grid
+    this.forecast = (raw.latest.forecast ?? []).map((hour) => new Outlook(hour))
+    this.visitorShare = typeof raw.latest.visitors === 'number' ? raw.latest.visitors / 100 : null
+    this.ages = raw.latest.ages?.length === 8 ? raw.latest.ages.map((share) => share / 100) : null
+    this.usual = raw.usual ?? null
     this.terms = [raw.name, raw.label].map(fold)
     this.koreanInitials = initials(raw.name)
+  }
+
+  /** One id across places and stations, used by the map, pins and links. */
+  get id(): string {
+    return `place:${this.code}`
   }
 
   name(lang: Lang): string {
@@ -107,6 +163,56 @@ export class Place {
   /** The middle of the city's estimated range. */
   get people(): number {
     return (this.range.min + this.range.max) / 2
+  }
+
+  /** How many of the people there are visitors and not regulars, or null when the city did not say. */
+  get visitors(): number | null {
+    return this.visitorShare === null ? null : this.people * this.visitorShare
+  }
+
+  /**
+   * How far the place is from its usual for this hour: 0.25 is a quarter busier,
+   * -0.5 is half as busy. Null until enough earlier days have been recorded.
+   */
+  get versusUsual(): number | null {
+    if (!this.usual || this.usual.days < Place.USUAL_NEEDS_DAYS || this.usual.people <= 0) return null
+    return (this.people - this.usual.people) / this.usual.people
+  }
+
+  /** The forecast hour with the highest crowd level, and of those the most people. Null with no forecast. */
+  get peakAhead(): Outlook | null {
+    if (!this.forecast.length) return null
+    return this.forecast.reduce((best, hour) =>
+      hour.level.rank > best.level.rank || (hour.level === best.level && hour.people > best.people) ? hour : best,
+    )
+  }
+
+  /** The first coming hour the city expects to be crowded, if the place is not crowded already. */
+  get crowdedAhead(): Outlook | null {
+    if (this.level === CrowdLevel.crowded) return null
+    return this.forecast.find((hour) => hour.level === CrowdLevel.crowded) ?? null
+  }
+
+  /** True on Saturday and Sunday, going by the latest reading. */
+  get isWeekend(): boolean {
+    const [y, mo, d] = this.time.slice(0, 10).split('-').map(Number)
+    return [0, 6].includes(new Date(Date.UTC(y, mo - 1, d)).getUTCDay())
+  }
+
+  /**
+   * The quietest and busiest hours between 08:00 and 22:00 on days like today
+   * (weekdays, or the weekend). Null until every one of those hours has a reading.
+   */
+  get bestTime(): { quietest: number; busiest: number } | null {
+    const rows = this.isWeekend ? this.grid.slice(5) : this.grid.slice(0, 5)
+    const hours: { hour: number; people: number }[] = []
+    for (let hour = 8; hour <= 22; hour++) {
+      const values = rows.map((row) => row[hour]).filter((value): value is number => value !== null)
+      if (!values.length) return null
+      hours.push({ hour, people: values.reduce((total, value) => total + value, 0) / values.length })
+    }
+    const pick = (better: (a: number, b: number) => boolean) => hours.reduce((best, each) => (better(each.people, best.people) ? each : best)).hour
+    return { quietest: pick((a, b) => a < b), busiest: pick((a, b) => a > b) }
   }
 
   /** The time of the latest reading, "HH:MM". */
@@ -203,6 +309,18 @@ export class PlaceDirectory {
   /** The places at one crowd level, most people first. */
   at(level: CrowdLevel): Place[] {
     return this.places.filter((place) => place.level === level).sort(Place.byPeople)
+  }
+
+  /** Places not crowded now that the city expects to be, soonest first. */
+  get crowdedAhead(): { place: Place; when: Outlook }[] {
+    return this.places
+      .flatMap((place) => (place.crowdedAhead ? [{ place, when: place.crowdedAhead }] : []))
+      .sort((a, b) => a.when.time.localeCompare(b.when.time) || b.place.people - a.place.people)
+  }
+
+  /** The most earlier days any place's usual rests on. It counts up as history builds. */
+  get usualDays(): number {
+    return Math.max(0, ...this.places.map((place) => place.usual?.days ?? 0))
   }
 
   /** How many places are at each crowd level, relaxed first. */
