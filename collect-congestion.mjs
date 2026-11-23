@@ -165,14 +165,15 @@ function readCsv(buffer) {
 
 // ---------- make sense of the table ----------
 
-/** A column heading that is a time of day, as "HH:MM", or null. Headings come as "5시30분", "05:30", or a spreadsheet time. */
+/** A column heading that is a time of day, as "HH:MM", or null. Headings come as "05:30~06:00", "5시30분", "05:30", or a spreadsheet time. */
 function slotOf(heading) {
   if (typeof heading === "number") {
     if (!(heading >= 0 && heading < 1.5)) return null; // a spreadsheet stores a time as a fraction of a day
     const minutes = Math.round((heading % 1) * 24 * 60);
     return `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
   }
-  const text = String(heading ?? "").replace(/\s/g, "");
+  // "05:30~06:00" is the half hour starting at 05:30.
+  const text = String(heading ?? "").replace(/\s/g, "").split(/[~∼〜]/)[0];
   const parts = /^(\d{1,2})시(\d{1,2})분?$/.exec(text) || /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(text);
   return parts ? `${String(Number(parts[1]) % 24).padStart(2, "0")}:${parts[2].padStart(2, "0")}` : null;
 }
