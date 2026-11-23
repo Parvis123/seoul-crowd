@@ -97,7 +97,8 @@ function readXlsx(buffer) {
   const shared = [...(zip.read("xl/sharedStrings.xml") ?? "").matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => textOf(m[1]));
   const sheetName = zip.names.filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)).sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
   const sheet = sheetName && zip.read(sheetName);
-  if (!sheet) throw new Error("the workbook has no sheet");
+  if (!sheet) throw new Error(`the workbook has no sheet. It holds: ${zip.names.join(", ")}`);
+  if (!/<row\b/.test(sheet)) throw new Error(`the sheet has no rows this script can read. It holds: ${zip.names.join(", ")}. It starts: ${sheet.slice(0, 400)}`);
   const rows = [];
   for (const [, rowXml] of sheet.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
     const row = [];
@@ -171,7 +172,10 @@ const DAYS = [
 function toTable(rows) {
   // The heading row is the first one with a station column and several time columns.
   const headAt = rows.findIndex((row) => row.filter((cell) => slotOf(cell)).length >= 10 && row.some((cell) => /역/.test(String(cell ?? ""))));
-  if (headAt < 0) throw new Error(`could not find the heading row. The first row reads: ${JSON.stringify((rows[0] ?? []).slice(0, 10))}`);
+  if (headAt < 0) {
+    const filled = rows.filter((row) => row.some((cell) => cell !== undefined && cell !== "")).slice(0, 3);
+    throw new Error(`could not find the heading row among ${rows.length} rows. The first filled rows read: ${JSON.stringify(filled.map((row) => row.slice(0, 9)))}`);
+  }
   const head = rows[headAt].map((cell) => (typeof cell === "string" ? cell.replace(/\s/g, "") : cell));
   const find = (pattern) => head.findIndex((cell) => typeof cell === "string" && pattern.test(cell));
   const column = { day: find(/요일/), line: find(/호선/), code: find(/역번호/), station: find(/역명|출발역|^역$/), direction: find(/상하|구분$|방향/) };
