@@ -27,6 +27,8 @@ import {
   sizeAt,
   stationFeatures,
 } from '@/components/map/overlay'
+import { ForecastScrubber } from '@/components/map/forecast-scrubber'
+import { MAP_SIZE } from '@/components/page-skeleton'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatNumber, formatRange, useLanguage } from '@/lib/i18n'
@@ -86,6 +88,8 @@ export function CityMap({
   network,
   selected,
   here,
+  step,
+  onStep,
   onSelect,
   onLocate,
 }: {
@@ -93,6 +97,9 @@ export function CityMap({
   selected: Item | null
   /** Where the reader is, once they have asked to see what is near them. */
   here: LatLng | null
+  /** How many hours into the city's forecast to draw the places. 0 is now. */
+  step: number
+  onStep: (step: number) => void
   onSelect: (item: Item) => void
   onLocate: () => void
 }) {
@@ -123,7 +130,7 @@ export function CityMap({
   }, [network])
 
   const stationData = useMemo(() => stationFeatures(network.stations?.stations ?? [], lang), [network.stations, lang])
-  const placeData = useMemo(() => placeFeatures(network, lang, theme), [network, lang, theme])
+  const placeData = useMemo(() => placeFeatures(network, lang, theme, step), [network, lang, theme, step])
   const routeData = useMemo(() => routeFeatures(network.stations?.routes ?? []), [network.stations])
 
   // ---------- the map itself ----------
@@ -305,7 +312,7 @@ export function CityMap({
 
   return (
     <figure>
-      <div className="relative h-[24rem] overflow-hidden rounded-xl border bg-(--map-bg) sm:h-[32rem] lg:h-[36rem]">
+      <div className={`relative overflow-hidden border bg-(--map-bg) ${MAP_SIZE}`}>
         {/* The map library sets its own positioning on this element, so it is given a size rather than pinned. */}
         <div ref={frame} role="application" aria-label={s.mapLabel} className="size-full" />
 
@@ -361,6 +368,8 @@ export function CityMap({
           </Button>
         </div>
 
+        <ForecastScrubber places={network.places} step={step} onStep={onStep} />
+
         {hover && (
           <div
             role="status"
@@ -370,8 +379,8 @@ export function CityMap({
             <div className="font-medium">{hover.item.name(lang)}</div>
             {hover.item.kind === 'place' ? (
               <div className="mt-1.5 flex items-center gap-2 text-muted-foreground">
-                <LevelBadge level={hover.item.level} />
-                <span className="tabular-nums">{s.rangePeople(formatRange(lang, hover.item.range))}</span>
+                <LevelBadge level={hover.item.expected(step).level} />
+                <span className="tabular-nums">{s.rangePeople(formatRange(lang, hover.item.expected(step).range))}</span>
               </div>
             ) : (
               <div className="mt-1.5 flex items-center gap-2 text-muted-foreground">

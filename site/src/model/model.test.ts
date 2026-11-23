@@ -201,7 +201,7 @@ describe('PlaceDirectory', () => {
   })
 
   it('counts the places at each crowd level', () => {
-    expect(places.levelCounts.map((entry) => entry.count)).toEqual([1, 1, 1, 1])
+    expect(places.levelCounts().map((entry) => entry.count)).toEqual([1, 1, 1, 1])
     expect(places.at(CrowdLevel.from('붐빔')).map((p) => p.name('en'))).toEqual(['Seoul Forest'])
   })
 })
@@ -282,6 +282,21 @@ describe('ranking by a chosen measure', () => {
     expect(night.crowdedAhead!.hour).toBe(20)
     expect(directory.crowdedAhead.map(({ place: each }) => each.code)).toEqual(['NIGHT'])
     expect(directory.get('HOME')!.forecast).toEqual([])
+  })
+
+  it('steps the whole city forward through the forecast', () => {
+    expect(directory.forecastHours).toBe(3)
+    expect(directory.clockAt(0)).toBe('18:00')
+    expect(directory.clockAt(2)).toBe('20:00')
+    // Two hours on, NIGHT is expected to be crowded. The places with no forecast stay as they are.
+    expect(directory.levelCounts(0).map((entry) => entry.count)).toEqual([2, 1, 0, 0])
+    expect(directory.levelCounts(2).map((entry) => entry.count)).toEqual([2, 0, 0, 1])
+    expect(names(directory.at(CrowdLevel.crowded, 2))).toEqual(['NIGHT'])
+    expect(directory.get('NIGHT')!.expected(2).people).toBe(15000)
+  })
+
+  it('knows the moment of the newest reading', () => {
+    expect(directory.readAt!.toISOString()).toBe('2026-11-23T09:00:00.000Z') // 18:00 in Seoul
   })
 })
 

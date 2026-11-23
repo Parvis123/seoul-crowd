@@ -105,7 +105,9 @@ export function stationFeatures(stations: readonly Station[], lang: Lang) {
 }
 
 /** One point for each place that has a position, coloured by its crowd level. */
-export function placeFeatures(network: Network, lang: Lang, theme: Theme) {
+/** The place rings. Give a step to draw them as the city expects them that many hours ahead. */
+export function placeFeatures(network: Network, lang: Lang, theme: Theme, step = 0) {
+  // Sizes are always measured against the biggest crowd right now, so a ring grows and shrinks as the forecast plays.
   const most = network.places.mostPeople?.people ?? 1
   // Most people first, so big rings are drawn under small ones.
   const features = network.places.byPeople.flatMap((place): Feature[] => {
@@ -118,9 +120,9 @@ export function placeFeatures(network: Network, lang: Lang, theme: Theme) {
         properties: {
           id: idOf(place),
           name: place.name(lang),
-          color: LEVEL_HEX[theme][place.level.rank],
+          color: LEVEL_HEX[theme][place.expected(step).level.rank],
           order: 0,
-          r: 5 + 12 * Math.sqrt(place.people / most),
+          r: 5 + 12 * Math.sqrt(Math.min(1.6, place.expected(step).people / most)),
         },
       },
     ]

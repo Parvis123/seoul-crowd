@@ -22,3 +22,11 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 )
+
+// The service worker makes the site installable and lets it open offline with the last readings it saw.
+// It is left out while developing, where a cache only gets in the way.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`)
+  })
+}

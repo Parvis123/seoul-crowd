@@ -3,15 +3,15 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { DaySpark } from '@/components/day-spark'
-import { Columns } from '@/components/columns'
 import { LineBadge } from '@/components/line-badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
+import { ByLine } from '@/components/stations/by-line'
+import { LineSummaryCard } from '@/components/stations/line-summary-card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { formatMonth, formatNumber, formatPeople, useLanguage } from '@/lib/i18n'
+import { formatMonth, formatNumber, useLanguage } from '@/lib/i18n'
 import { Line, type LineId } from '@/model/line'
 import { SERVICE_HOURS } from '@/model/ridership'
 import type { Station, StationDirectory } from '@/model/station'
@@ -22,8 +22,6 @@ const PAGE = 40
 // 05:00 comes first on the slider and 01:00 last, the way a service day runs.
 const sliderOf = (hour: number) => SERVICE_HOURS.indexOf(hour as (typeof SERVICE_HOURS)[number])
 
-/** The service hour with the most boardings in a list of 24. */
-const peakHour = (on: readonly number[]) => SERVICE_HOURS.reduce<number>((best, h) => (on[h] > on[best] ? h : best), SERVICE_HOURS[0])
 
 function seoulHour() {
   const hour = Number(
@@ -197,81 +195,16 @@ export function Stations({
         </p>
       </div>
 
-      {view === 'stations' && line && lineSummary && (
-        <Card>
-          <CardContent className="grid items-center gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-            <div>
-              <div className="flex items-center gap-2 text-lg font-medium">
-                <LineBadge line={line} named />
-              </div>
-              <p className="text-sm text-muted-foreground">{s.stationCount(lineSummary.stations)}</p>
-              <p className="mt-4 text-sm text-muted-foreground">{s.crushTitle}</p>
-              <p className="text-2xl font-semibold tracking-tight">{s.hourRange(peakHour(lineSummary.on))}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {s.crushBody(formatPeople(lang, Math.max(...lineSummary.on)))}{' '}
-                {s.crushNote}
-              </p>
-            </div>
-            <Columns
-              label={s.crushChartLabel(line.name(lang))}
-              items={SERVICE_HOURS.map((h) => ({
-                id: String(h),
-                value: lineSummary.on[h],
-                axis: h % 6 === 0 ? s.hour(h) : '',
-                text: s.crushBar(s.hourRange(h), number(lineSummary.on[h])),
-              }))}
-            />
-          </CardContent>
-        </Card>
-      )}
+      {view === 'stations' && lineSummary && <LineSummaryCard summary={lineSummary} />}
 
       {view === 'lines' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{s.byLineTitle}</CardTitle>
-            <CardDescription>{s.byLineHint}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ol className="-mx-2">
-              {summaries.map((entry) => {
-                const name = entry.top.name(lang)
-                const lineName = entry.line.name(lang)
-                return (
-                  <li key={entry.line.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLine(entry.line)
-                        setShown(PAGE)
-                        setView('stations')
-                      }}
-                      aria-label={s.byLineRow(lineName, name, number(entry.topCount))}
-                      className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:grid-cols-[11rem_minmax(0,1.4fr)_minmax(0,1fr)_6rem]"
-                    >
-                      <span className="flex items-center gap-2 text-sm text-muted-foreground max-sm:col-span-2">
-                        <LineBadge line={entry.line} named />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{name}</span>
-                        {entry.next.length > 0 && (
-                          <span className="block truncate text-sm text-muted-foreground">
-                            {s.byLineThen(entry.next.map((station) => station.name(lang)))}
-                          </span>
-                        )}
-                      </span>
-                      <Progress
-                        value={(entry.topCount / Math.max(1, summaries[0].topCount)) * 100}
-                        className="h-1.5 max-sm:order-last max-sm:col-span-2 [&>[data-slot=progress-indicator]]:bg-heat"
-                        aria-hidden="true"
-                      />
-                      <span className="text-right tabular-nums">{number(entry.topCount)}</span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ol>
-          </CardContent>
-        </Card>
+        <ByLine
+          summaries={summaries}
+          onChoose={(chosen) => {
+            setLine(chosen)
+            setShown(PAGE)
+          }}
+        />
       )}
 
       {view === 'stations' && (

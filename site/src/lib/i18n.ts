@@ -92,13 +92,15 @@ const en = {
   panelNow: (range: string) => `About ${range} people`,
   panelAt: (time: string) => `at ${time} Seoul time`,
   weekTitle: 'The week here',
-  weekHint: 'Brighter squares are busier hours. The outlined square is this hour.',
+  weekHint: 'Brighter squares are busier hours. Point at one, or tap it, to read it. The outlined square is this hour.',
   hoursRecorded: (filled: number) => `${filled} of 168 hours recorded so far`,
   hoursRecordedHint: 'A reading is saved every 20 minutes, so the week fills in over the next seven days.',
   dayTitle: 'A typical day',
   dayHint: 'Average people for each hour of the day, across the days recorded.',
   chartPeople: 'People',
   cellEmpty: (time: string) => `${time}: no reading yet`,
+  noReading: 'No reading yet',
+  aboutPeople: (people: string) => `About ${people} people`,
   cellPeople: (time: string, people: string) => `${time}: about ${people} people`,
   days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   daysLong: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
@@ -226,6 +228,24 @@ const en = {
   nearFar: 'You are outside Seoul, so there is nothing nearby to show.',
   youAreHere: 'You are here',
 
+  // ---- stepping through the forecast, and how fresh the reading is
+  loading: 'Loading the latest readings',
+  live: 'Live',
+  updatedAgo: (minutes: number) => (minutes < 1 ? 'updated just now' : `updated ${minutes} min ago`),
+  updatedLongAgo: (hours: number) => `last reading ${hours} h ago`,
+  asOfForecast: (time: string) => `The city’s forecast for ${time}`,
+  headlineForecast: (count: number, time: string) =>
+    count === 0
+      ? `Nowhere is expected to be crowded at ${time}.`
+      : count === 1
+        ? `1 place is expected to be crowded at ${time}.`
+        : `${count} places are expected to be crowded at ${time}.`,
+  scrubPlay: 'Play the next 12 hours',
+  scrubPause: 'Pause',
+  scrubLabel: 'Hours ahead',
+  scrubNow: 'Now',
+  scrubBack: 'Back to now',
+
   // ---- how this works
   howTitle: 'How this works',
   how: [
@@ -339,13 +359,15 @@ const ko: Strings = {
   panelNow: (range) => `약 ${range}`,
   panelAt: (time) => `${time} 기준 (서울 시각)`,
   weekTitle: '요일·시간대별 인구',
-  weekHint: '밝을수록 붐비는 시간대입니다. 테두리가 있는 칸이 현재 시간입니다.',
+  weekHint: '밝을수록 붐비는 시간대입니다. 칸을 가리키거나 누르면 값을 볼 수 있습니다. 테두리가 있는 칸이 현재 시간입니다.',
   hoursRecorded: (filled) => `지금까지 168시간 중 ${filled}시간 기록됨`,
   hoursRecordedHint: '20분마다 기록하므로 앞으로 7일 동안 한 주가 채워집니다.',
   dayTitle: '평균적인 하루',
   dayHint: '기록된 날짜를 기준으로 한 시간대별 평균 인구입니다.',
   chartPeople: '인구',
   cellEmpty: (time) => `${time}: 아직 기록 없음`,
+  noReading: '아직 기록 없음',
+  aboutPeople: (people) => `약 ${people}명`,
   cellPeople: (time, people) => `${time}: 약 ${people}명`,
   days: ['월', '화', '수', '목', '금', '토', '일'],
   daysLong: ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'],
@@ -466,6 +488,20 @@ const ko: Strings = {
   nearFailed: '현재 위치를 찾지 못했습니다.',
   nearFar: '서울 밖에 계셔서 주변에 표시할 곳이 없습니다.',
   youAreHere: '현재 위치',
+
+  // ---- stepping through the forecast, and how fresh the reading is
+  loading: '최신 정보를 불러오는 중',
+  live: '실시간',
+  updatedAgo: (minutes) => (minutes < 1 ? '방금 업데이트' : `${minutes}분 전 업데이트`),
+  updatedLongAgo: (hours) => `마지막 기록 ${hours}시간 전`,
+  asOfForecast: (time) => `${time} 서울시 예측`,
+  headlineForecast: (count, time) =>
+    count === 0 ? `${time}에는 붐비는 곳이 없을 것으로 보입니다.` : `${time}에는 ${count}곳이 붐빌 것으로 보입니다.`,
+  scrubPlay: '앞으로 12시간 재생',
+  scrubPause: '일시정지',
+  scrubLabel: '몇 시간 뒤',
+  scrubNow: '지금',
+  scrubBack: '지금으로 돌아가기',
 
   // ---- how this works
   howTitle: '이 사이트는 이렇게 만들어집니다',

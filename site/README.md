@@ -24,7 +24,8 @@ The same three checks run on GitHub on every push to `dev` (`.github/workflows/s
 
 - **`src/model`** holds everything the site knows, as plain classes with no React in them. `Place` and `Station` are the two things on the page. `PlaceDirectory` and `StationDirectory` build them from the collector's files and deal with the quirks in the city's data. `Network` joins the two: which places are named after which stations, what is near a point, and one search across both. `Measure` is a way to rank places (people, visitors, against usual). `route.ts` works out the order of stops along each line so the map can draw them.
 - **`src/api/queries.ts`** fetches the two data files with React Query and hands them to the model.
-- **`src/components`** is the page. `map/` draws the map with MapLibre on OpenFreeMap tiles.
+- **`src/hooks`** holds the page's state, one concern each: what is open (`use-selection`), where the reader is (`use-nearby`), what they pinned (`use-pinned`).
+- **`src/components`** is the page, one section per file. `App.tsx` only arranges them. `map/` draws the map with MapLibre on OpenFreeMap tiles, and `page-skeleton.tsx` is the page in outline while the first readings load.
 - **`src/lib`** has the text in both languages (`i18n.ts`), the state kept in the address (`address.ts`) and pins kept in the browser (`pins.ts`).
 
 ## Links
@@ -39,6 +40,10 @@ What you are looking at is kept in the address, so any view can be sent to someo
 | `?tab=stations&view=lines` | The busiest stations on each line |
 | `?by=visitors` | The lists ranked by visitors |
 | `?lang=ko` | The site in Korean |
+
+## Installing it, and using it offline
+
+The built site is a progressive web app: a browser can install it like an app, and it opens with no connection, showing the last readings it saw. `public/sw.js` is the service worker that does this, with its three caching rules written at the top. It is only switched on in the built site, not under `npm run dev`. To try it locally, run `npm run build` and then `npx vite preview`.
 
 ## What the numbers leave out
 

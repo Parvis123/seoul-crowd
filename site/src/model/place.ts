@@ -179,6 +179,15 @@ export class Place {
     return (this.people - this.usual.people) / this.usual.people
   }
 
+  /**
+   * The place as the city expects it `step` hours on. Step 0 is the latest
+   * reading. With no forecast for that hour, the place stays as it is now.
+   */
+  expected(step: number): { level: CrowdLevel; people: number; range: { min: number; max: number } } {
+    const hour = step > 0 ? this.forecast[step - 1] : undefined
+    return hour ? { level: hour.level, people: hour.people, range: hour.range } : { level: this.level, people: this.people, range: this.range }
+  }
+
   /** The forecast hour with the highest crowd level, and of those the most people. Null with no forecast. */
   get peakAhead(): Outlook | null {
     if (!this.forecast.length) return null
@@ -306,9 +315,28 @@ export class PlaceDirectory {
     return this.places.filter((place) => place.level.rank > 0).sort(Place.byCrowding)
   }
 
-  /** The places at one crowd level, most people first. */
-  at(level: CrowdLevel): Place[] {
-    return this.places.filter((place) => place.level === level).sort(Place.byPeople)
+  /** The places at one crowd level, most people first. Give a step to ask about that many hours ahead. */
+  at(level: CrowdLevel, step = 0): Place[] {
+    return this.places
+      .filter((place) => place.expected(step).level === level)
+      .sort((a, b) => b.expected(step).people - a.expected(step).people)
+  }
+
+  /** How many hours ahead the city's forecast runs. 0 when it gave none. */
+  get forecastHours(): number {
+    return Math.max(0, ...this.places.map((place) => place.forecast.length))
+  }
+
+  /** The clock time `step` hours into the forecast, "HH:00". Step 0 is the newest reading's own time. */
+  clockAt(step: number): string | null {
+    if (step === 0) return this.newestClock
+    const hour = this.places.find((place) => place.forecast[step - 1])?.forecast[step - 1]
+    return hour ? hour.time.slice(11) : null
+  }
+
+  /** When the newest reading was taken, as a moment in time. The file gives Seoul local time, which is nine hours ahead of UTC. */
+  get readAt(): Date | null {
+    return this.places.length ? new Date((Math.max(...this.places.map((place) => place.minutes)) - 9 * 60) * 60_000) : null
   }
 
   /** Places not crowded now that the city expects to be, soonest first. */
@@ -323,9 +351,9 @@ export class PlaceDirectory {
     return Math.max(0, ...this.places.map((place) => place.usual?.days ?? 0))
   }
 
-  /** How many places are at each crowd level, relaxed first. */
-  get levelCounts(): { level: CrowdLevel; count: number }[] {
-    return CrowdLevel.all.map((level) => ({ level, count: this.places.filter((place) => place.level === level).length }))
+  /** How many places are at each crowd level, relaxed first. Give a step to ask about that many hours ahead. */
+  levelCounts(step = 0): { level: CrowdLevel; count: number }[] {
+    return CrowdLevel.all.map((level) => ({ level, count: this.places.filter((place) => place.expected(step).level === level).length }))
   }
 
   /** The time of the newest reading, "HH:MM". */

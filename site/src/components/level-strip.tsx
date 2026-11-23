@@ -5,11 +5,12 @@ import type { PlaceDirectory } from '@/model/place'
 /**
  * Every place as one strip, split by the city's crowd level, most crowded
  * first. The counts under it are also the key to the map's colours.
+ * Give a step to show the city's forecast for that many hours ahead.
  */
-export function LevelStrip({ places, className = '' }: { places: PlaceDirectory; className?: string }) {
+export function LevelStrip({ places, step = 0, className = '' }: { places: PlaceDirectory; step?: number; className?: string }) {
   const { s } = useLanguage()
   // Crowded first, so the part worth reading sits at the start of the line.
-  const counts = [...places.levelCounts].reverse()
+  const counts = places.levelCounts(step).reverse()
   const name = (korean: string) => s.levels[korean] ?? korean
   const label = s.levelStripLabel(counts.map(({ level, count }) => s.levelCount(count, name(level.korean))))
 
@@ -21,7 +22,7 @@ export function LevelStrip({ places, className = '' }: { places: PlaceDirectory;
             count > 0 && (
               <span
                 key={level.rank}
-                className={`min-w-1.5 basis-0 ${LEVEL_DOT[level.rank]}`}
+                className={`min-w-1.5 basis-0 transition-[flex-grow] duration-500 ${LEVEL_DOT[level.rank]}`}
                 style={{ flexGrow: count }}
                 title={s.levelCount(count, name(level.korean))}
               />
