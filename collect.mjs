@@ -6,6 +6,8 @@
 //
 // Each run appends new readings to data/readings-YYYY-MM.csv and rebuilds
 // data/weekly.json, which is the only file the website needs to read.
+// The CSV keeps the history. The city's forecast and its breakdown of who is
+// there describe this moment only, so they go straight into weekly.json.
 // Needs Node 18 or newer. No dependencies.
 
 import { readFile, writeFile, appendFile, mkdir, readdir } from "node:fs/promises";
@@ -23,6 +25,7 @@ const TIMEOUT_MS = 15000;
 const ATTEMPTS = 2;
 const COLUMNS = ["collected_at", "ppltn_time", "area_cd", "area_nm", "congest_lvl", "ppltn_min", "ppltn_max"];
 const QUOTA_CODE = "ERROR-337"; // daily call limit reached for this key
+const AGE_BANDS = [0, 10, 20, 30, 40, 50, 60, 70]; // under 10, 10s, 20s ... 70 and over
 
 // ---------- place list ----------
 
@@ -62,6 +65,24 @@ function toRow(item) {
   return valid ? row : null;
 }
 
+const percent = (value) => (value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : null);
+
+// What the city says about this moment beyond the head count. Every part is
+// optional: a place that lacks one still gets its reading saved.
+function toNow(item) {
+  const ages = AGE_BANDS.map((band) => percent(item[`PPLTN_RATE_${band}`]));
+  const forecast = (Array.isArray(item.FCST_PPLTN) ? item.FCST_PPLTN : [])
+    .map((f) => ({ time: String(f.FCST_TIME || ""), level: String(f.FCST_CONGEST_LVL || ""), min: Number(f.FCST_PPLTN_MIN), max: Number(f.FCST_PPLTN_MAX) }))
+    .filter((f) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(f.time) && f.level && Number.isFinite(f.min) && Number.isFinite(f.max));
+  return {
+    // The share of people who are not regulars: the city counts someone as a regular
+    // if they spent four hours or more there on ten days running last month.
+    visitors: percent(item.NON_RESNT_PPLTN_RATE),
+    ages: ages.every((share) => share !== null) ? ages : null,
+    forecast,
+  };
+}
+
 // The key is part of the URL, so the URL is never printed.
 async function fetchPlace(name) {
   const url = `${BASE}/${KEY}/json/citydata_ppltn/1/5/${encodeURIComponent(name)}`;
@@ -81,7 +102,7 @@ async function fetchPlace(name) {
       if (!item) return { ok: false, code: code || "NO-DATA", message: message || "no place in response" };
       const row = toRow(item);
       if (!row) return { ok: false, code: "SHAPE", message: `unexpected fields: ${Object.keys(item).slice(0, 12).join(", ")}` };
-      return { ok: true, row };
+      return { ok: true, row, now: toNow(item) };
     } catch (err) {
       last = { ok: false, code: "NETWORK", message: err.name === "TimeoutError" ? "timed out" : "request failed" };
     }
@@ -177,7 +198,24 @@ function dayAndHour(ppltnTime) {
   return { weekday, hour: Number(ppltnTime.slice(11, 13)) };
 }
 
-async function buildWeekly(places) {
+// The average at one hour over earlier days of the same kind (weekdays, or the weekend).
+// "Earlier" leaves today out, so a busy evening is not compared with itself.
+function usualFor(hourly, latestTime) {
+  const today = latestTime.slice(0, 10);
+  const { weekday, hour } = dayAndHour(latestTime);
+  const weekend = weekday >= 5;
+  const days = [];
+  for (const [key, { sum, count }] of hourly) {
+    const [date, h] = key.split("|");
+    if (Number(h) !== hour || date >= today) continue;
+    if (dayAndHour(`${date} 00:00`).weekday >= 5 !== weekend) continue;
+    days.push(sum / count);
+  }
+  if (days.length === 0) return null;
+  return { people: Math.round(days.reduce((a, b) => a + b, 0) / days.length), days: days.length };
+}
+
+async function buildWeekly(places, now = new Map()) {
   const files = existsSync(DATA_DIR) ? (await readdir(DATA_DIR)).filter((f) => /^readings-\d{4}-\d{2}\.csv$/.test(f)).sort() : [];
   const byPlace = new Map();
   for (const file of files) {
@@ -193,6 +231,7 @@ async function buildWeekly(places) {
           latest: null,
           sum: Array.from({ length: 7 }, () => new Array(24).fill(0)),
           count: Array.from({ length: 7 }, () => new Array(24).fill(0)),
+          hourly: new Map(), // "date|hour" -> sum and count, for the usual
         });
       }
       const p = byPlace.get(r.area_nm);
@@ -200,6 +239,9 @@ async function buildWeekly(places) {
       if (!(hour >= 0 && hour < 24)) continue;
       p.sum[weekday][hour] += (min + max) / 2;
       p.count[weekday][hour] += 1;
+      const slot = `${r.ppltn_time.slice(0, 10)}|${hour}`;
+      const soFar = p.hourly.get(slot) || { sum: 0, count: 0 };
+      p.hourly.set(slot, { sum: soFar.sum + (min + max) / 2, count: soFar.count + 1 });
       p.readings += 1;
       if (r.ppltn_time < p.first) p.first = r.ppltn_time;
       if (!p.latest || r.ppltn_time >= p.latest.time) p.latest = { time: r.ppltn_time, level: r.congest_lvl, min, max };
@@ -217,7 +259,10 @@ async function buildWeekly(places) {
       code: p.code,
       readings: p.readings,
       first_reading: p.first,
-      latest: p.latest,
+      // The forecast and breakdown are added only when they belong to this same reading.
+      latest: p.latest && now.get(name)?.time === p.latest.time ? { ...p.latest, ...now.get(name).now } : p.latest,
+      // The usual number of people at this hour on earlier days of the same kind, or null with no history yet.
+      usual: p.latest ? usualFor(p.hourly, p.latest.time) : null,
       // grid[weekday][hour] = average people, or null when there is no reading yet
       grid: p.sum.map((row, d) => row.map((total, h) => (p.count[d][h] ? Math.round(total / p.count[d][h]) : null))),
     })),
@@ -244,14 +289,15 @@ async function main() {
 
   const { results, quotaHit } = await fetchAll(places);
   const rows = [];
+  const now = new Map(); // place name -> what the city says about this moment
   let failed = 0;
   results.forEach((r, i) => {
-    if (r.ok) rows.push(r.row);
+    if (r.ok) { rows.push(r.row); now.set(r.row.area_nm, { time: r.row.ppltn_time, now: r.now }); }
     else { failed++; console.error(`  failed: ${places[i].name} (${r.code}) ${r.message}`); }
   });
 
   const { saved, duplicates } = await saveRows(rows);
-  const summarised = await buildWeekly(places);
+  const summarised = await buildWeekly(places, now);
   console.log(`Saved ${saved} new reading${saved === 1 ? "" : "s"}, skipped ${duplicates} already stored, ${failed} failed`);
   console.log(`weekly.json now covers ${summarised} place${summarised === 1 ? "" : "s"}`);
   if (quotaHit) console.error("The daily call limit for this key was reached. Collect less often or ask the portal for a higher limit.");

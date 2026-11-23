@@ -269,6 +269,18 @@ async function main() {
     findLabel = (station) => old.get(station) ?? null;
   }
 
+  // ----- the order of stations along each line -----
+  // The station list numbers every stop ("239", "K312", "211-2" for a branch). The website
+  // sorts these to draw each line through its stations.
+  let stops;
+  if (nameResult.ok && nameResult.rows.length > 0) {
+    stops = nameResult.rows
+      .map((row) => [String(row.LINE_NUM ?? "").trim(), String(row.FR_CODE ?? "").trim(), String(row.STATION_NM ?? "").trim()])
+      .filter(([line, code, station]) => line && code && station);
+  } else {
+    stops = (await previousFile())?.stops ?? [];
+  }
+
   // ----- positions -----
   let coordinates;
   if (placeResult.ok && placeResult.rows.length > 0) {
@@ -330,6 +342,7 @@ async function main() {
     days: days.length ? { from: dashed(days.at(-1).day), to: dashed(days[0].day), count: days.length } : null,
     stations,
     coordinates,
+    stops,
   };
   await mkdir(path.dirname(OUT), { recursive: true });
   await writeFile(OUT, JSON.stringify(summary) + "\n");

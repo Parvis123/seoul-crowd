@@ -12,7 +12,7 @@ Data: Seoul Open Data Plaza, Seoul real-time city data (`citydata_ppltn`). Reuse
 | `places.json` | The places to collect. Names must match the city's official place names exactly. |
 | `.github/workflows/collect.yml` | Runs the collector every 20 minutes on GitHub and saves the results to the repository. |
 | `data/readings-YYYY-MM.csv` | Every reading, one file per month. Created on the first run. |
-| `data/weekly.json` | Average people per weekday and hour for each place. The website reads this for places. |
+| `data/weekly.json` | For each place: the latest reading with the city's 12-hour forecast and who is there, the usual for this hour, and average people per weekday and hour. The website reads this for places. |
 | `collect-stations.mjs` | Fetches subway ridership for every station. Same key, no dependencies. |
 | `.github/workflows/stations.yml` | Runs the station collector once a day. |
 | `data/stations.json` | Boardings and exits for every station. The website reads this for stations. |
@@ -52,6 +52,8 @@ In `data/stations.json`, each entry is one station on one line:
 - `weekdays`: average boardings plus exits for each weekday, Monday first.
 
 `coordinates` lists where each station is, by name, with one position for each line that stops there.
+
+`stops` lists every stop as line, stop number and station name. The stop numbers give the order of stations along a line, which the website uses to draw the lines on the map.
 
 These are card taps at the gates, so they show how busy a station is, not how full the trains are. The hourly figures are monthly totals, so they cannot be split by weekday.
 
