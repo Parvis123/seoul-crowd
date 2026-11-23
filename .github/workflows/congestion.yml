@@ -1,0 +1,47 @@
+name: Collect train crowding
+
+on:
+  schedule:
+    - cron: "23 21 */7 * *" # about once a week, 06:23 in Seoul. The source file changes a few times a year.
+  workflow_dispatch: # lets you run it by hand from the Actions tab
+  push: # also runs whenever this collector itself changes
+    branches: [main]
+    paths:
+      - collect-congestion.mjs
+      - .github/workflows/congestion.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: congestion
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # No key is needed: the file is a public download.
+      - name: Fetch the newest file
+        run: node collect-congestion.mjs
+
+      - name: Save to the repository
+        run: |
+          git config user.name "crowd-collector"
+          git config user.email "crowd-collector@users.noreply.github.com"
+          git add data/congestion.json
+          if git diff --cached --quiet; then
+            echo "Nothing new to save"
+            exit 0
+          fi
+          git commit -m "Update train crowding $(date -u +%Y-%m-%d)"
+          # The crowd collector saves to the same branch every 20 minutes, so try a few times.
+          for attempt in 1 2 3; do
+            if git pull --rebase && git push; then exit 0; fi
+            sleep 5
+          done
+          echo "::error title=Train crowding::Could not save the new file to the repository"
+          exit 1

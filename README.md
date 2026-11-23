@@ -16,6 +16,9 @@ Data: Seoul Open Data Plaza, Seoul real-time city data (`citydata_ppltn`). Reuse
 | `collect-stations.mjs` | Fetches subway ridership for every station. Same key, no dependencies. |
 | `.github/workflows/stations.yml` | Runs the station collector once a day. |
 | `data/stations.json` | Boardings and exits for every station. The website reads this for stations. |
+| `collect-congestion.mjs` | Fetches how full the trains are on Lines 1 to 8, from Seoul Metro's public spreadsheet. No key, no dependencies. |
+| `.github/workflows/congestion.yml` | Checks for a newer spreadsheet about once a week. |
+| `data/congestion.json` | Train crowding by station, direction and half hour, for weekdays, Saturdays and Sundays. |
 
 ## Setup
 
